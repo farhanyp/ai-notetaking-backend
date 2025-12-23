@@ -7,6 +7,7 @@ import (
 	"ai-notetaking-be/pkg/embedding"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -21,6 +22,7 @@ type IConsumerService interface {
 }
 
 type consumerService struct {
+	notebookRepository repository.INotebookRepository
 	noteRepository repository.INoteRepository
 	noteEmbeddingRepository repository.INoteEmbeddingRepository
 	pubSub *gochannel.GoChannel
@@ -62,9 +64,36 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		panic(err)
 	}
 
+	notebook, err := cs.notebookRepository.GetById(ctx, note.Notebook_id)
+	if err != nil {
+		panic(err)
+	}
+
+	noteUpdatedAt := "-"
+	if(note.UpdatedAt != nil) {
+		noteUpdatedAt = note.UpdatedAt.Format(time.RFC3339)
+	}
+
+	content := fmt.Sprintf(`
+	Note Title : %s
+	Notebook Title: %s
+
+	%s
+
+	Created at: %s
+	Updated at: %s
+	`,
+	note.Title,
+	notebook.Name,
+	note.Content,
+	note.CreateAt.Format(time.RFC3339),
+	noteUpdatedAt,
+	)
+
+
 	res, err := embedding.GetGeminiEmbedding(
 		os.Getenv("GOOGLE_GEMINI_API_KEY"),
-		note.Content,
+		content,
 	)
 	if  err != nil {
 		panic(err)
@@ -72,7 +101,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 
 	noteEmbedding := entity.NoteEmbedding{
 		Id: uuid.New(),
-		Document: note.Content,
+		Document: content,
 		EmbeddingValue: res.Embedding.Values,
 		NoteId: note.Id,
 		CreateAt: time.Now(),
@@ -89,11 +118,17 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 
 }
 
-func NewConsumerService(pubSub *gochannel.GoChannel, topicName string, noteRepository repository.INoteRepository, noteEmbeddingRepository repository.INoteEmbeddingRepository) IConsumerService {
+func NewConsumerService(
+	pubSub *gochannel.GoChannel, 
+	topicName string, 
+	noteRepository repository.INoteRepository, 
+	noteEmbeddingRepository repository.INoteEmbeddingRepository,
+	notebookRepository repository.INotebookRepository) IConsumerService {
 	return &consumerService{
 		pubSub: pubSub,
 		topicName: topicName,
 		noteRepository: noteRepository,
 		noteEmbeddingRepository: noteEmbeddingRepository,
+		notebookRepository: notebookRepository,
 	}
 }
