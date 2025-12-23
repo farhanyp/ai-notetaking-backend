@@ -2,30 +2,19 @@ package service
 
 import (
 	"ai-notetaking-be/internal/dto"
+	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
+	"ai-notetaking-be/pkg/embedding"
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
+	"os"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/gofiber/fiber/v2/log"
+	"github.com/google/uuid"
 )
-
-type EmbeddingRequestContentPart struct{
-	Text string `json:"text"`
-}
-
-type EmbeddingRequestContent struct{
-	Parts []EmbeddingRequestContentPart `json:"parts"`
-}
-
-type EmbeddingRequest struct {
-	Model string `json:"model"`
-	Content EmbeddingRequestContent `json:"content"`
-	TaskType string `json:"task_type"`
-}
 
 type IConsumerService interface {
 	Consume(ctx context.Context) error
@@ -33,6 +22,7 @@ type IConsumerService interface {
 
 type consumerService struct {
 	noteRepository repository.INoteRepository
+	noteEmbeddingRepository repository.INoteEmbeddingRepository
 	pubSub *gochannel.GoChannel
 	topicName string
 }
@@ -72,28 +62,26 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		panic(err)
 	}
 
-	geminiReq := EmbeddingRequest{
-		Model: "models/gemini-embedding-exp-03-07",
-		Content: EmbeddingRequestContent{
-			Parts: []EmbeddingRequestContentPart{
-				{
-					Text: note.Content,
-				},
-			},
-		},
-		TaskType: "SEMANTIC_SIMILARITY",
+	res, err := embedding.GetGeminiEmbedding(
+		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		note.Content,
+	)
+	if  err != nil {
+		panic(err)
 	}
 
-	http.NewRequest(
-		"Post",
-		"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
-		geminiReq,
-	)
+	noteEmbedding := entity.NoteEmbedding{
+		Id: uuid.New(),
+		Document: note.Content,
+		EmbeddingValue: res.Embedding.Values,
+		NoteId: note.Id,
+		CreateAt: time.Now(),
+	}
 
-	client := &http.Client{}
-	client.Do()
-
-	fmt.Printf("Processing note ID: %s\n", payload.NotedId)
+	err = cs.noteEmbeddingRepository.Create(ctx, &noteEmbedding)
+	if  err != nil {
+		panic(err)
+	}
 
 	msg.Ack()
 
@@ -101,10 +89,11 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 
 }
 
-func NewConsumerService(pubSub *gochannel.GoChannel, topicName string, noteRepository repository.INoteRepository) IConsumerService {
+func NewConsumerService(pubSub *gochannel.GoChannel, topicName string, noteRepository repository.INoteRepository, noteEmbeddingRepository repository.INoteEmbeddingRepository) IConsumerService {
 	return &consumerService{
 		pubSub: pubSub,
 		topicName: topicName,
 		noteRepository: noteRepository,
+		noteEmbeddingRepository: noteEmbeddingRepository,
 	}
 }
