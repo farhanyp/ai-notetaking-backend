@@ -4,8 +4,10 @@ import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
+	"ai-notetaking-be/pkg/embedding"
 	"context"
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +16,7 @@ import (
 type INoteService interface {
 	Create(ctx context.Context, req *dto.CreateNoteRequest) (*dto.CreateNoteResponse, error)
 	Show(ctx context.Context, id uuid.UUID) (*dto.ShowNoteResponse, error)
+	SemanticSearch(ctx context.Context, query string) ([]*dto.SemanticSearchResponse, error)
 	Update(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error)
 	Delete(ctx context.Context, idParam uuid.UUID) error
 	Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.MoveNoteResponse, error)
@@ -23,13 +26,15 @@ type noteService struct {
 	noteRepository repository.INoteRepository
 	notebookRepository repository.INotebookRepository
 	publisherService IPublisherService
+	notEmbeddingRepository repository.INoteEmbeddingRepository
 }
 
-func NewNoteService(noteRepository repository.INoteRepository, notebookRepository repository.INotebookRepository, publisherService IPublisherService) INoteService {
+func NewNoteService(noteRepository repository.INoteRepository, notebookRepository repository.INotebookRepository, publisherService IPublisherService, notEmbeddingRepository repository.INoteEmbeddingRepository) INoteService {
 	return &noteService{
 		noteRepository: noteRepository,
 		notebookRepository: notebookRepository,
 		publisherService: publisherService,
+		notEmbeddingRepository: notEmbeddingRepository,
 	}
 }
 
@@ -84,6 +89,52 @@ func (c *noteService) Show(ctx context.Context, idParam uuid.UUID) (*dto.ShowNot
 	}
 
 	return &res, nil
+}
+
+func (c *noteService) SemanticSearch(ctx context.Context, query string) ([]*dto.SemanticSearchResponse, error) {
+
+	embeddingRes, err := embedding.GetGeminiEmbedding(
+		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		query,
+		"RETRIEVAL_QUERY",
+	)
+
+	if err != nil {
+		return nil,  err
+	}
+
+	noteEmbeddings, err := c.notEmbeddingRepository.SemanticSearch(ctx, embeddingRes.Embedding.Values)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, 0)
+	for _, noteEmbedding := range noteEmbeddings {
+		ids = append(ids, noteEmbedding.NoteId)
+	}
+
+	notes, err := c.noteRepository.GetByIds(ctx, ids)
+	if err != nil {
+		return nil,  err
+	}
+
+	response := make([]*dto.SemanticSearchResponse, 0)
+	for _, n := range noteEmbeddings {
+		for _, noteItem := range notes {
+			if n.NoteId == noteItem.Id {
+				response = append(response, &dto.SemanticSearchResponse{
+					Id: noteItem.Id,
+					Title: noteItem.Title,
+					Content: noteItem.Content,
+					NotebookId: noteItem.Notebook_id,
+					CreateAt: noteItem.CreateAt,
+					UpdateAt: noteItem.UpdatedAt,
+				})
+			}
+		}
+	}
+	
+	return response, nil
 }
 
 func (c *noteService) Update(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error) {

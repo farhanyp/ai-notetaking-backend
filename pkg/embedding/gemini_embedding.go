@@ -33,6 +33,7 @@ type EmbeddingResponse struct {
 func GetGeminiEmbedding(
 	apiKey string,
 	text string,
+	task_type string,
 ) (*EmbeddingResponse, error) {
 
 	geminiReq := EmbeddingRequest{
@@ -44,7 +45,7 @@ func GetGeminiEmbedding(
 				},
 			},
 		},
-		TaskType: "SEMANTIC_SIMILARITY",
+		TaskType: task_type,
 	}
 
 	geminiReqJson, err := json.Marshal(geminiReq)

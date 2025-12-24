@@ -43,3 +43,12 @@ type MoveNoteRequest struct {
 type MoveNoteResponse struct {
 	Id uuid.UUID
 }
+
+type SemanticSearchResponse struct {
+	Id      uuid.UUID `json:"id"`
+	Title	string `json:"title"`
+	Content	string `json:"content"`
+	NotebookId      uuid.UUID `json:"notebook_id"`
+	CreateAt time.Time `json:"created_at"`
+	UpdateAt *time.Time `json:"updated_at"`
+}

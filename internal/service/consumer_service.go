@@ -98,6 +98,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	res, err := embedding.GetGeminiEmbedding(
 		os.Getenv("GOOGLE_GEMINI_API_KEY"),
 		content,
+		"RETRIEVAL_DOCUMENT",
 	)
 	if  err != nil {
 		panic(err)
@@ -126,7 +127,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	}
 
 	err = noteEmbeddingRepository.Create(ctx, &noteEmbedding)
-	if  err != nil {
+	if  err != nil {	
 		panic(err)
 	}
 
