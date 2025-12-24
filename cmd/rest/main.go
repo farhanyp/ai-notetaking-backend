@@ -50,8 +50,8 @@ func main() {
 	)
 
 	exampleService := service.NewExampleService(exampleRepository)
-	notebookService := service.NewNotebookService(notebookRepository, noteRepository, db)
-	noteService := service.NewNoteService(noteRepository, notebookRepository, publisherService, noteEmbeddingRepository)
+	notebookService := service.NewNotebookService(notebookRepository, noteRepository, noteEmbeddingRepository, publisherService, db)
+	noteService := service.NewNoteService(noteRepository, notebookRepository, publisherService, noteEmbeddingRepository, db)
 
 	exampleController := controller.NewExampleController(exampleService)
 	notebookController := controller.NewNotebookController(notebookService)

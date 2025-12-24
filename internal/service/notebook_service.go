@@ -5,10 +5,10 @@ import (
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,13 +24,23 @@ type INotebookService interface {
 type notebookService struct {
 	notebookRepository repository.INotebookRepository
 	noteRepository repository.INoteRepository
+	noteEmbeddingRepository repository.INoteEmbeddingRepository
+	publisherService IPublisherService
+
 	db *pgxpool.Pool
 }
 
-func NewNotebookService(notebookRepository repository.INotebookRepository, noteRepository repository.INoteRepository, db *pgxpool.Pool) INotebookService {
+func NewNotebookService(
+	notebookRepository repository.INotebookRepository, 
+	noteRepository repository.INoteRepository, 
+	noteEmbeddingRepository repository.INoteEmbeddingRepository,
+	publisherService IPublisherService,
+	db *pgxpool.Pool) INotebookService {
 	return &notebookService{
 		notebookRepository: notebookRepository,
 		noteRepository: noteRepository,
+		noteEmbeddingRepository: noteEmbeddingRepository,
+		publisherService: publisherService,
 		db: db,
 	}
 }
@@ -117,6 +127,29 @@ func (c *notebookService) Update(ctx context.Context, req *dto.UpdateNotebookReq
 		return nil, err
 	}
 
+	notes, err := c.noteRepository.GetByNotesIds(ctx, []uuid.UUID{notebook.Id})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, note := range notes {
+		msg := dto.PublishEmbedNoteMessage {
+			NotedId: note.Id,
+		}
+
+		msgJson, err := json.Marshal(msg)
+		if err != nil {
+			return nil, err
+		}
+
+		err = c.publisherService.Publish(ctx, msgJson)
+		if err != nil {
+			return nil, err
+		}
+
+
+	}
+
 	return &dto.UpdateNotebookResponse{
 		Id: notebook.Id,
 	}, nil
@@ -171,7 +204,7 @@ func (c *notebookService) Delete(ctx context.Context, idParam uuid.UUID) error {
 		return err
 	}
 
-	tx, err := c.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := c.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -180,8 +213,14 @@ func (c *notebookService) Delete(ctx context.Context, idParam uuid.UUID) error {
 
 	notebookRepo := c.notebookRepository.UsingTx(ctx, tx)
 	noteRepo := c.noteRepository.UsingTx(ctx, tx)
+	noteEmbeddingRepo := c.noteEmbeddingRepository.UsingTx(ctx, tx)
 
 	err = notebookRepo.DeleteById(ctx, idParam)
+	if err != nil {
+		return err
+	}
+
+	err = noteEmbeddingRepo.DeleteByNotebookId(ctx, idParam)
 	if err != nil {
 		return err
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 	"github.com/gofiber/fiber/v2/log"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -112,7 +111,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		CreateAt: time.Now(),
 	}
 
-	tx, err := cs.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := cs.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
