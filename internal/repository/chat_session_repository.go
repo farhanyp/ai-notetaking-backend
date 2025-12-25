@@ -11,6 +11,7 @@ import (
 type IChatSessionRepository interface {
 	UsingTx(ctx context.Context, tx database.DatabaseQueryer) IChatSessionRepository
 	Create(ctx context.Context, chatSession *entity.ChatSession) error 
+	GetAllSession(ctx context.Context) ([]*entity.ChatSession, error)
 }
 
 type chatbotRepository struct {
@@ -39,6 +40,38 @@ func (n *chatbotRepository) Create(ctx context.Context, chatSession *entity.Chat
 	}
 
 	return nil
+}
+
+func (n *chatbotRepository) GetAllSession(ctx context.Context) ([]*entity.ChatSession, error)  {
+	rows, err := n.db.Query(
+		ctx,
+		`SELECT id, title, created_at, updated_at, deleted_at, is_deleted FROM chat_session WHERE is_deleted = false ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]*entity.ChatSession, 0)
+
+	for rows.Next() {
+		var chatSession entity.ChatSession
+		err = rows.Scan(
+			&chatSession.Id,
+			&chatSession.Title,
+			&chatSession.CreateAt,
+			&chatSession.UpdatedAt,
+			&chatSession.DeleteAt,
+			&chatSession.IsDeleted,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, &chatSession)
+
+	}
+
+	return res, err
 }
 
 func NewChatSessionRepository(db *pgxpool.Pool) IChatSessionRepository {
