@@ -11,7 +11,8 @@ import (
 
 type IChatSessionRepository interface {
 	UsingTx(ctx context.Context, tx database.DatabaseQueryer) IChatSessionRepository
-	Create(ctx context.Context, chatSession *entity.ChatSession) error 
+	Create(ctx context.Context, chatSession *entity.ChatSession) error
+	Update(ctx context.Context, chatSession *entity.ChatSession) error
 	GetAllSession(ctx context.Context) ([]*entity.ChatSession, error)
 	GetSessionById(ctx context.Context, sessionId uuid.UUID) (*entity.ChatSession, error)
 	GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessage, error)
@@ -131,8 +132,22 @@ func (n *chatbotRepository) GetChatBySessionId(ctx context.Context, sessionId uu
 
 	}
 
-
 	return res, err
+}
+
+func (n *chatbotRepository) Update(ctx context.Context, chatSession *entity.ChatSession) error {
+	_, err := n.db.Exec(
+		ctx,
+		`UPDATE chat_session SET title = $1, updated_at = $2 WHERE id = $3`,
+		chatSession.Title,
+		chatSession.UpdatedAt,
+		chatSession.Id,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewChatSessionRepository(db *pgxpool.Pool) IChatSessionRepository {

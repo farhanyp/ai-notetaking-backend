@@ -16,6 +16,7 @@ type IChatbotService interface {
 	CreateSession(ctx context.Context) (*dto.CreateSessionResponse, error)
 	GetAllSession(ctx context.Context) ([]*dto.GetAllSessionResponse, error)
 	GetChatHistory(ctx context.Context, sessionId uuid.UUID) ([]*dto.GetChatHistoryResponse, error)
+	SendChat(ctx context.Context, request *dto.SendChatRequest) (*dto.SendChatResponse, error)
 }
 
 type chatbotService struct {
@@ -150,10 +151,107 @@ func (c *chatbotService) GetChatHistory(ctx context.Context, sessionId uuid.UUID
 			Id: sessions.Id,
 			Role: sessions.Role,
 			Chat: sessions.Chat,
-			CreateAt: sessions.CreateAt,
+			CreatedAt: sessions.CreateAt,
 		})
 		
 	}
 
 	return response, nil
+}
+
+func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequest) (*dto.SendChatResponse, error) {
+
+	tx, err := c.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback(ctx)
+
+	chatSessionRepository := c.chatSessionRepository.UsingTx(ctx, tx)
+	chatMessageRepository := c.chatMessageRepository.UsingTx(ctx, tx)
+	chatMessageRawRepository := c.chatMessageRawRepository.UsingTx(ctx, tx)
+
+	SessionChat, err := chatSessionRepository.GetSessionById(ctx, request.ChatSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	ExistingChat, err := chatSessionRepository.GetChatBySessionId(ctx, request.ChatSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	updateSessionTitle := len(ExistingChat) == 2
+	now := time.Now()
+
+	chatMessageUser := entity.ChatMessage{
+		Id: uuid.New(),
+		Chat: request.Chat,
+		Role: constant.ChatMessageRoleUser,
+		ChatSessionId: request.ChatSessionId,
+		CreateAt: now,
+	}
+
+	chatMessageRawUser := entity.ChatMessageRaw{
+		Id: uuid.New(),
+		Chat: request.Chat,
+		Role: constant.ChatMessageRoleUser,
+		ChatSessionId: request.ChatSessionId,
+		CreateAt: now,
+	}
+
+	chatMessageModel := entity.ChatMessage{
+		Id: uuid.New(),
+		Chat: "This is automated reply",
+		Role: constant.ChatMessageRoleModel,
+		ChatSessionId: request.ChatSessionId,
+		CreateAt: now.Add(1 * time.Millisecond),
+	}
+
+	chatMessageRawModel := entity.ChatMessageRaw{
+		Id: uuid.New(),
+		Chat: "This is automated reply",
+		Role: constant.ChatMessageRoleModel,
+		ChatSessionId: request.ChatSessionId,
+		CreateAt: now.Add(1 * time.Millisecond),
+	}
+
+	chatMessageRepository.Create(ctx, &chatMessageUser)
+	chatMessageRepository.Create(ctx, &chatMessageModel)
+	chatMessageRawRepository.Create(ctx, &chatMessageRawUser)
+	chatMessageRawRepository.Create(ctx, &chatMessageRawModel)
+
+	if(updateSessionTitle){
+		SessionChat.Title = request.Chat
+		SessionChat.UpdatedAt = &now
+	}
+
+	err = chatSessionRepository.Update(ctx, SessionChat)
+	if err != nil {
+		return nil, err
+	}
+
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.SendChatResponse{
+		ChatSessionId: SessionChat.Id,
+		ChatSessionTitle: SessionChat.Title,
+		Send: &dto.SendChatResponseChat{
+			Id: chatMessageUser.Id,
+			Chat: chatMessageUser.Chat,
+			Role: chatMessageUser.Role,
+			CreatedAt: chatMessageUser.CreateAt,
+		},
+		Reply: &dto.SendChatResponseChat{
+			Id: chatMessageModel.Id,
+			Chat: chatMessageModel.Chat,
+			Role: chatMessageModel.Role,
+			CreatedAt: chatMessageModel.CreateAt,
+		},
+	}, nil
 }
