@@ -15,6 +15,7 @@ import (
 type IChatbotService interface {
 	CreateSession(ctx context.Context) (*dto.CreateSessionResponse, error)
 	GetAllSession(ctx context.Context) ([]*dto.GetAllSessionResponse, error)
+	GetChatHistory(ctx context.Context, sessionId uuid.UUID) ([]*dto.GetChatHistoryResponse, error)
 }
 
 type chatbotService struct {
@@ -123,6 +124,33 @@ func (c *chatbotService) GetAllSession(ctx context.Context) ([]*dto.GetAllSessio
 			Title: sessions.Title,
 			CreateAt: sessions.CreateAt,
 			UpdatedAt: sessions.UpdatedAt,
+		})
+		
+	}
+
+	return response, nil
+}
+
+func (c *chatbotService) GetChatHistory(ctx context.Context, sessionId uuid.UUID) ([]*dto.GetChatHistoryResponse, error){
+
+	_, err := c.chatSessionRepository.GetSessionById(ctx, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, err := c.chatSessionRepository.GetChatBySessionId(ctx, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	response := make([]*dto.GetChatHistoryResponse, 0)
+	for _, sessions := range messages {
+
+		response = append(response, &dto.GetChatHistoryResponse{
+			Id: sessions.Id,
+			Role: sessions.Role,
+			Chat: sessions.Chat,
+			CreateAt: sessions.CreateAt,
 		})
 		
 	}
