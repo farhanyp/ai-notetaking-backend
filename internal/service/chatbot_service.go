@@ -5,7 +5,10 @@ import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
+	"ai-notetaking-be/pkg/chatbot"
 	"context"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -177,12 +180,12 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		return nil, err
 	}
 
-	ExistingChat, err := chatSessionRepository.GetChatBySessionId(ctx, request.ChatSessionId)
+	ExistingChatRaw, err := chatMessageRawRepository.GetChatBySessionId(ctx, request.ChatSessionId)
 	if err != nil {
 		return nil, err
 	}
 
-	updateSessionTitle := len(ExistingChat) == 2
+	updateSessionTitle := len(ExistingChatRaw) == 2
 	now := time.Now()
 
 	chatMessageUser := entity.ChatMessage{
@@ -193,17 +196,46 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		CreateAt: now,
 	}
 
+	strBuilder := strings.Builder{}
+	strBuilder.WriteString("User Next Question: ")
+	strBuilder.WriteString(request.Chat)
+	strBuilder.WriteString("\n\n")
+	strBuilder.WriteString("Your Answer")
+
 	chatMessageRawUser := entity.ChatMessageRaw{
 		Id: uuid.New(),
-		Chat: request.Chat,
+		Chat: strBuilder.String(),
 		Role: constant.ChatMessageRoleUser,
 		ChatSessionId: request.ChatSessionId,
 		CreateAt: now,
 	}
 
+	ExistingChatRaw = append(
+		ExistingChatRaw, 
+		&chatMessageRawUser,
+	)
+
+	geminiReq := make([]*chatbot.ChatHistory, 0)
+	for _, ExistingChat := range ExistingChatRaw {
+
+		geminiReq = append(geminiReq, &chatbot.ChatHistory{
+			Chat: ExistingChat.Chat,
+			Role: ExistingChat.Role,
+		})
+	}
+	
+	reply, err := chatbot.GetGeminiResponse(
+		ctx,
+		os.Getenv("GOOGLE_GEMINI_API_KEY"), 
+		geminiReq,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	chatMessageModel := entity.ChatMessage{
 		Id: uuid.New(),
-		Chat: "This is automated reply",
+		Chat: reply,
 		Role: constant.ChatMessageRoleModel,
 		ChatSessionId: request.ChatSessionId,
 		CreateAt: now.Add(1 * time.Millisecond),
@@ -211,7 +243,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 
 	chatMessageRawModel := entity.ChatMessageRaw{
 		Id: uuid.New(),
-		Chat: "This is automated reply",
+		Chat: reply,
 		Role: constant.ChatMessageRoleModel,
 		ChatSessionId: request.ChatSessionId,
 		CreateAt: now.Add(1 * time.Millisecond),

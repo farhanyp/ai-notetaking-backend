@@ -30,7 +30,7 @@ func NewChatController(chatbotService service.IChatbotService) IChatbotControlle
 func (c *chatbotController) RegisterRoutes(r fiber.Router) {
 	h := r.Group("/v1/chatbot")
 	h.Post("/create-session", c.CreateSession)
-	h.Get("/create-session", c.GetAllSession)
+	h.Get("/sessions", c.GetAllSession)
 	h.Get("/chat-history", c.GetChatHistory)
 	h.Post("/send-chat", c.SendChat)
 }
