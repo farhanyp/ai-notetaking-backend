@@ -6,7 +6,9 @@ import (
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
 	"ai-notetaking-be/pkg/chatbot"
+	"ai-notetaking-be/pkg/embedding"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -27,14 +29,22 @@ type chatbotService struct {
 	chatSessionRepository repository.IChatSessionRepository
 	chatMessageRepository    repository.IChatMessageRepository
 	chatMessageRawRepository repository.IChatMessageRawRepository
+	notEmbeddingRepository repository.INoteEmbeddingRepository
 }
 
-func NewChatbotService(db *pgxpool.Pool, chatSessionRepository repository.IChatSessionRepository, chatMessageRepository repository.IChatMessageRepository, chatMessageRawRepository repository.IChatMessageRawRepository) IChatbotService {
+func NewChatbotService(
+	db *pgxpool.Pool, 
+	chatSessionRepository repository.IChatSessionRepository, 
+	chatMessageRepository repository.IChatMessageRepository, 
+	chatMessageRawRepository repository.IChatMessageRawRepository,
+	notEmbeddingRepository repository.INoteEmbeddingRepository,
+	) IChatbotService {
 	return &chatbotService{
 		db: db,
 		chatSessionRepository:    chatSessionRepository,
 		chatMessageRepository:    chatMessageRepository,
 		chatMessageRawRepository: chatMessageRawRepository,
+		notEmbeddingRepository: notEmbeddingRepository,
 	}
 }
 
@@ -174,6 +184,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 	chatSessionRepository := c.chatSessionRepository.UsingTx(ctx, tx)
 	chatMessageRepository := c.chatMessageRepository.UsingTx(ctx, tx)
 	chatMessageRawRepository := c.chatMessageRawRepository.UsingTx(ctx, tx)
+	noteEmbeddingRepository := c.notEmbeddingRepository.UsingTx(ctx, tx)
 
 	SessionChat, err := chatSessionRepository.GetSessionById(ctx, request.ChatSessionId)
 	if err != nil {
@@ -196,7 +207,29 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		CreateAt: now,
 	}
 
+	embeddingRes, err := embedding.GetGeminiEmbedding(
+		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		request.Chat,
+		"RETRIEVAL_QUERY",
+	)
+
+	if err != nil {
+		return nil,  err
+	}
+
+	noteEmbeddings, err := noteEmbeddingRepository.SearchSimilarity(ctx, embeddingRes.Embedding.Values)
+	if err != nil {
+		return nil, err
+	}
+
 	strBuilder := strings.Builder{}
+
+	for i, noteEmbeding := range noteEmbeddings {
+		strBuilder.WriteString(fmt.Sprintf("Reference %d\n", i+1))
+		strBuilder.WriteString(noteEmbeding.Document)
+		strBuilder.WriteString("\n\n")
+	}
+
 	strBuilder.WriteString("User Next Question: ")
 	strBuilder.WriteString(request.Chat)
 	strBuilder.WriteString("\n\n")
