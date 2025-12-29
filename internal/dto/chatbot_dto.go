@@ -42,3 +42,7 @@ type SendChatResponse struct {
 	Send *SendChatResponseChat `json:"send"`
 	Reply *SendChatResponseChat `json:"reply"`
 }
+
+type DeleteSessionRequest struct {
+	ChatSessionId uuid.UUID `json:"chat_session_id"`
+}

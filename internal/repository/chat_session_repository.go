@@ -4,6 +4,7 @@ import (
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/pkg/database"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,6 +14,7 @@ type IChatSessionRepository interface {
 	UsingTx(ctx context.Context, tx database.DatabaseQueryer) IChatSessionRepository
 	Create(ctx context.Context, chatSession *entity.ChatSession) error
 	Update(ctx context.Context, chatSession *entity.ChatSession) error
+	Delete(ctx context.Context, sessionId uuid.UUID) error
 	GetAllSession(ctx context.Context) ([]*entity.ChatSession, error)
 	GetSessionById(ctx context.Context, sessionId uuid.UUID) (*entity.ChatSession, error)
 	GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessage, error)
@@ -142,6 +144,20 @@ func (n *chatbotRepository) Update(ctx context.Context, chatSession *entity.Chat
 		chatSession.Title,
 		chatSession.UpdatedAt,
 		chatSession.Id,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *chatbotRepository) Delete(ctx context.Context, sessionId uuid.UUID) error {
+	_, err := n.db.Exec(
+		ctx,
+		`UPDATE chat_session SET deleted_at = $1, is_deleted = true WHERE id = $2`,
+		time.Now(),
+		sessionId,
 	)
 	if err != nil {
 		return err
