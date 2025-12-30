@@ -26,60 +26,60 @@ type IChatbotService interface {
 }
 
 type chatbotService struct {
-	db *pgxpool.Pool
-	chatSessionRepository repository.IChatSessionRepository
+	db                       *pgxpool.Pool
+	chatSessionRepository    repository.IChatSessionRepository
 	chatMessageRepository    repository.IChatMessageRepository
 	chatMessageRawRepository repository.IChatMessageRawRepository
-	notEmbeddingRepository repository.INoteEmbeddingRepository
+	notEmbeddingRepository   repository.INoteEmbeddingRepository
 }
 
 func NewChatbotService(
-	db *pgxpool.Pool, 
-	chatSessionRepository repository.IChatSessionRepository, 
-	chatMessageRepository repository.IChatMessageRepository, 
+	db *pgxpool.Pool,
+	chatSessionRepository repository.IChatSessionRepository,
+	chatMessageRepository repository.IChatMessageRepository,
 	chatMessageRawRepository repository.IChatMessageRawRepository,
 	notEmbeddingRepository repository.INoteEmbeddingRepository,
-	) IChatbotService {
+) IChatbotService {
 	return &chatbotService{
-		db: db,
+		db:                       db,
 		chatSessionRepository:    chatSessionRepository,
 		chatMessageRepository:    chatMessageRepository,
 		chatMessageRawRepository: chatMessageRawRepository,
-		notEmbeddingRepository: notEmbeddingRepository,
+		notEmbeddingRepository:   notEmbeddingRepository,
 	}
 }
 
-func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionResponse, error){
+func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionResponse, error) {
 
 	now := time.Now()
 	chatSession := &entity.ChatSession{
-		Id: uuid.New(),
-		Title: "Unamed session",
+		Id:       uuid.New(),
+		Title:    "Unamed session",
 		CreateAt: now,
 	}
 
 	chatMessage := &entity.ChatMessage{
-		Id: uuid.New(),
-		Chat: "Hi, how can i help you ?",
-		Role: constant.ChatMessageRoleModel,
+		Id:            uuid.New(),
+		Chat:          "Hi, how can i help you ?",
+		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: chatSession.Id,
-		CreateAt: now,
+		CreateAt:      now,
 	}
 
 	chatMessageRawUser := &entity.ChatMessageRaw{
-		Id: uuid.New(),
-		Chat: constant.ChatMessageRawInititalUserPromptV1,
-		Role: constant.ChatMessageRoleUser,
+		Id:            uuid.New(),
+		Chat:          constant.ChatMessageRawInititalUserPromptV1,
+		Role:          constant.ChatMessageRoleUser,
 		ChatSessionId: chatSession.Id,
-		CreateAt: now,
+		CreateAt:      now,
 	}
 
 	chatMessageRawModel := &entity.ChatMessageRaw{
-		Id: uuid.New(),
-		Chat: constant.ChatMessageRawInititalModelPromptV1,
-		Role: constant.ChatMessageRoleModel,
+		Id:            uuid.New(),
+		Chat:          constant.ChatMessageRawInititalModelPromptV1,
+		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: chatSession.Id,
-		CreateAt: now,
+		CreateAt:      now,
 	}
 
 	tx, err := c.db.Begin(ctx)
@@ -124,7 +124,7 @@ func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionR
 
 }
 
-func (c *chatbotService) GetAllSession(ctx context.Context) ([]*dto.GetAllSessionResponse, error){
+func (c *chatbotService) GetAllSession(ctx context.Context) ([]*dto.GetAllSessionResponse, error) {
 
 	sessions, err := c.chatSessionRepository.GetAllSession(ctx)
 	if err != nil {
@@ -135,18 +135,18 @@ func (c *chatbotService) GetAllSession(ctx context.Context) ([]*dto.GetAllSessio
 	for _, sessions := range sessions {
 
 		response = append(response, &dto.GetAllSessionResponse{
-			Id: sessions.Id,
-			Title: sessions.Title,
-			CreateAt: sessions.CreateAt,
+			Id:        sessions.Id,
+			Name:      sessions.Title,
+			CreateAt:  sessions.CreateAt,
 			UpdatedAt: sessions.UpdatedAt,
 		})
-		
+
 	}
 
 	return response, nil
 }
 
-func (c *chatbotService) GetChatHistory(ctx context.Context, sessionId uuid.UUID) ([]*dto.GetChatHistoryResponse, error){
+func (c *chatbotService) GetChatHistory(ctx context.Context, sessionId uuid.UUID) ([]*dto.GetChatHistoryResponse, error) {
 
 	_, err := c.chatSessionRepository.GetSessionById(ctx, sessionId)
 	if err != nil {
@@ -162,12 +162,12 @@ func (c *chatbotService) GetChatHistory(ctx context.Context, sessionId uuid.UUID
 	for _, sessions := range messages {
 
 		response = append(response, &dto.GetChatHistoryResponse{
-			Id: sessions.Id,
-			Role: sessions.Role,
-			Chat: sessions.Chat,
+			Id:        sessions.Id,
+			Role:      sessions.Role,
+			Chat:      sessions.Chat,
 			CreatedAt: sessions.CreateAt,
 		})
-		
+
 	}
 
 	return response, nil
@@ -201,11 +201,11 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 	now := time.Now()
 
 	chatMessageUser := entity.ChatMessage{
-		Id: uuid.New(),
-		Chat: request.Chat,
-		Role: constant.ChatMessageRoleUser,
+		Id:            uuid.New(),
+		Chat:          request.Chat,
+		Role:          constant.ChatMessageRoleUser,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt: now,
+		CreateAt:      now,
 	}
 
 	embeddingRes, err := embedding.GetGeminiEmbedding(
@@ -215,7 +215,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 	)
 
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
 	decideUseRAGChatHistories := make([]*chatbot.ChatHistory, 0)
@@ -225,12 +225,12 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 				Chat: constant.DecideUseRAGMessageRawInitialUserPromptV1,
 				Role: constant.ChatMessageRoleUser,
 			})
-		} else if i == 1{
+		} else if i == 1 {
 			decideUseRAGChatHistories = append(decideUseRAGChatHistories, &chatbot.ChatHistory{
 				Chat: constant.ChatMessageRawInititalModelPromptV1,
 				Role: constant.ChatMessageRoleModel,
 			})
-		} 
+		}
 
 		decideUseRAGChatHistories = append(decideUseRAGChatHistories, &chatbot.ChatHistory{
 			Chat: rawChat.Chat,
@@ -264,21 +264,21 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 
 	}
 
-	strBuilder.WriteString("User Next Question: ")	
+	strBuilder.WriteString("User Next Question: ")
 	strBuilder.WriteString(request.Chat)
 	strBuilder.WriteString("\n\n")
 	strBuilder.WriteString("Your Answer")
 
 	chatMessageRawUser := entity.ChatMessageRaw{
-		Id: uuid.New(),
-		Chat: strBuilder.String(),
-		Role: constant.ChatMessageRoleUser,
+		Id:            uuid.New(),
+		Chat:          strBuilder.String(),
+		Role:          constant.ChatMessageRoleUser,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt: now,
+		CreateAt:      now,
 	}
 
 	ExistingChatRaw = append(
-		ExistingChatRaw, 
+		ExistingChatRaw,
 		&chatMessageRawUser,
 	)
 
@@ -290,10 +290,10 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 			Role: ExistingChat.Role,
 		})
 	}
-	
+
 	reply, err := chatbot.GetGeminiResponse(
 		ctx,
-		os.Getenv("GOOGLE_GEMINI_API_KEY"), 
+		os.Getenv("GOOGLE_GEMINI_API_KEY"),
 		geminiReq,
 	)
 	if err != nil {
@@ -301,19 +301,19 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 	}
 
 	chatMessageModel := entity.ChatMessage{
-		Id: uuid.New(),
-		Chat: reply,
-		Role: constant.ChatMessageRoleModel,
+		Id:            uuid.New(),
+		Chat:          reply,
+		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt: now.Add(1 * time.Millisecond),
+		CreateAt:      now.Add(1 * time.Millisecond),
 	}
 
 	chatMessageRawModel := entity.ChatMessageRaw{
-		Id: uuid.New(),
-		Chat: reply,
-		Role: constant.ChatMessageRoleModel,
+		Id:            uuid.New(),
+		Chat:          reply,
+		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt: now.Add(1 * time.Millisecond),
+		CreateAt:      now.Add(1 * time.Millisecond),
 	}
 
 	chatMessageRepository.Create(ctx, &chatMessageUser)
@@ -321,7 +321,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 	chatMessageRawRepository.Create(ctx, &chatMessageRawUser)
 	chatMessageRawRepository.Create(ctx, &chatMessageRawModel)
 
-	if(updateSessionTitle){
+	if updateSessionTitle {
 		SessionChat.Title = request.Chat
 		SessionChat.UpdatedAt = &now
 	}
@@ -331,7 +331,6 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		return nil, err
 	}
 
-
 	err = tx.Commit(ctx)
 	if err != nil {
 		return nil, err
@@ -339,17 +338,17 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 
 	return &dto.SendChatResponse{
 		ChatSessionId: SessionChat.Id,
-		ChatSessionTitle: SessionChat.Title,
+		Title:         SessionChat.Title,
 		Send: &dto.SendChatResponseChat{
-			Id: chatMessageUser.Id,
-			Chat: chatMessageUser.Chat,
-			Role: chatMessageUser.Role,
+			Id:        chatMessageUser.Id,
+			Chat:      chatMessageUser.Chat,
+			Role:      chatMessageUser.Role,
 			CreatedAt: chatMessageUser.CreateAt,
 		},
 		Reply: &dto.SendChatResponseChat{
-			Id: chatMessageModel.Id,
-			Chat: chatMessageModel.Chat,
-			Role: chatMessageModel.Role,
+			Id:        chatMessageModel.Id,
+			Chat:      chatMessageModel.Chat,
+			Role:      chatMessageModel.Role,
 			CreatedAt: chatMessageModel.CreateAt,
 		},
 	}, nil
@@ -364,21 +363,19 @@ func (c *chatbotService) DeleteSession(ctx context.Context, session *dto.DeleteS
 
 	defer tx.Rollback(ctx)
 
-	chatSessionRepository := c.chatSessionRepository.UsingTx(ctx,tx)
-	chatMessageRepository := c.chatMessageRepository.UsingTx(ctx,tx)
-	chatMessageRawRepository := c.chatMessageRawRepository.UsingTx(ctx,tx)
+	chatSessionRepository := c.chatSessionRepository.UsingTx(ctx, tx)
+	chatMessageRepository := c.chatMessageRepository.UsingTx(ctx, tx)
+	chatMessageRawRepository := c.chatMessageRawRepository.UsingTx(ctx, tx)
 
 	_, err = chatSessionRepository.GetSessionById(ctx, session.ChatSessionId)
 	if err != nil {
 		return err
 	}
 
-
 	err = chatSessionRepository.Delete(ctx, session.ChatSessionId)
 	if err != nil {
 		return err
 	}
-
 
 	err = chatMessageRawRepository.DeleteBySessionId(ctx, session.ChatSessionId)
 	if err != nil {

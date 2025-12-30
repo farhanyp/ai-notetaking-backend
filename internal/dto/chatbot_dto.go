@@ -12,7 +12,7 @@ type CreateSessionResponse struct {
 
 type GetAllSessionResponse struct {
 	Id        uuid.UUID  `json:"id"`
-	Title     string     `json:"title"`
+	Name      string     `json:"name"`
 	CreateAt  time.Time  `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 }
@@ -37,10 +37,10 @@ type SendChatRequest struct {
 }
 
 type SendChatResponse struct {
-	ChatSessionId    uuid.UUID             `json:"chat_session_id"`
-	ChatSessionTitle string                `json:"chat_session_title"`
-	Send             *SendChatResponseChat `json:"send"`
-	Reply            *SendChatResponseChat `json:"reply"`
+	ChatSessionId uuid.UUID             `json:"chat_session_id"`
+	Title         string                `json:"title"`
+	Send          *SendChatResponseChat `json:"send"`
+	Reply         *SendChatResponseChat `json:"reply"`
 }
 
 type DeleteSessionRequest struct {
