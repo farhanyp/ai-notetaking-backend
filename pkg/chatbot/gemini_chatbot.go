@@ -21,7 +21,7 @@ type GeminiChatContent struct {
 
 type GeminiChatRequest struct {
 	Contents []*GeminiChatContent `json:"contents"`
-	GeneretionConfig *GeminiChatGeneretionConfig
+	GeneretionConfig *GeminiChatGeneretionConfig `json:"generationConfig"`
 }
 
 type GeminiChatCandidate struct {
