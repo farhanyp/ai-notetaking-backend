@@ -23,11 +23,11 @@ type IConsumerService interface {
 }
 
 type consumerService struct {
-	notebookRepository repository.INotebookRepository
-	noteRepository repository.INoteRepository
+	notebookRepository      repository.INotebookRepository
+	noteRepository          repository.INoteRepository
 	noteEmbeddingRepository repository.INoteEmbeddingRepository
-	pubSub *gochannel.GoChannel
-	topicName string
+	pubSub                  *gochannel.GoChannel
+	topicName               string
 
 	db *pgxpool.Pool
 }
@@ -73,7 +73,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	}
 
 	noteUpdatedAt := "-"
-	if(note.UpdatedAt != nil) {
+	if note.UpdatedAt != nil {
 		noteUpdatedAt = note.UpdatedAt.Format(time.RFC3339)
 	}
 
@@ -86,29 +86,28 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	Created at: %s
 	Updated at: %s
 	`,
-	note.Title,
-	notebook.Name,
-	note.Content,
-	note.CreateAt.Format(time.RFC3339),
-	noteUpdatedAt,
+		note.Title,
+		notebook.Name,
+		note.Content,
+		note.CreateAt.Format(time.RFC3339),
+		noteUpdatedAt,
 	)
-
 
 	res, err := embedding.GetGeminiEmbedding(
 		os.Getenv("GOOGLE_GEMINI_API_KEY"),
 		content,
 		"RETRIEVAL_DOCUMENT",
 	)
-	if  err != nil {
+	if err != nil {
 		panic(err)
 	}
 
 	noteEmbedding := entity.NoteEmbedding{
-		Id: uuid.New(),
-		Document: content,
+		Id:             uuid.New(),
+		Document:       content,
 		EmbeddingValue: res.Embedding.Values,
-		NoteId: note.Id,
-		CreateAt: time.Now(),
+		NoteId:         note.Id,
+		CreateAt:       time.Now(),
 	}
 
 	tx, err := cs.db.Begin(ctx)
@@ -126,12 +125,12 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	}
 
 	err = noteEmbeddingRepository.Create(ctx, &noteEmbedding)
-	if  err != nil {	
+	if err != nil {
 		panic(err)
 	}
 
 	err = tx.Commit(ctx)
-	if  err != nil {
+	if err != nil {
 		panic(err)
 	}
 
@@ -142,18 +141,18 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 }
 
 func NewConsumerService(
-	pubSub *gochannel.GoChannel, 
-	topicName string, 
-	noteRepository repository.INoteRepository, 
+	pubSub *gochannel.GoChannel,
+	topicName string,
+	noteRepository repository.INoteRepository,
 	noteEmbeddingRepository repository.INoteEmbeddingRepository,
 	notebookRepository repository.INotebookRepository,
 	db *pgxpool.Pool) IConsumerService {
 	return &consumerService{
-		pubSub: pubSub,
-		topicName: topicName,
-		noteRepository: noteRepository,
+		pubSub:                  pubSub,
+		topicName:               topicName,
+		noteRepository:          noteRepository,
 		noteEmbeddingRepository: noteEmbeddingRepository,
-		notebookRepository: notebookRepository,
-		db: db,
+		notebookRepository:      notebookRepository,
+		db:                      db,
 	}
 }
