@@ -1,3 +1,3 @@
-DB_CONNECTION_STRING="postgresql://postgres.zekngetemegdzjsnpqnj:TSM0PmlG51rucKe2@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres"
-GOOGLE_GEMINI_API_KEY=SyAgqlFn4yFmzumaCsRGSkVh9vwjkWQCyx0"
+DB_CONNECTION_STRING=
+GOOGLE_GEMINI_API_KEY=
 EMBED_NOTE_CONTENT_TOPIC_name=
