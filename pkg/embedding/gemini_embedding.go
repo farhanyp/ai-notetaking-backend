@@ -32,12 +32,13 @@ type EmbeddingResponse struct {
 
 func GetGeminiEmbedding(
 	apiKey string,
+	modelName string,
 	text string,
 	task_type string,
 ) (*EmbeddingResponse, error) {
 
 	geminiReq := EmbeddingRequest{
-		Model: "models/gemini-embedding-exp-03-07",
+		Model: modelName,
 		Content: EmbeddingRequestContent{
 			Parts: []EmbeddingRequestContentPart{
 				{

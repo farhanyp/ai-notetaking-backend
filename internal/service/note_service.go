@@ -24,37 +24,37 @@ type INoteService interface {
 }
 
 type noteService struct {
-	noteRepository repository.INoteRepository
-	notebookRepository repository.INotebookRepository
-	publisherService IPublisherService
+	noteRepository         repository.INoteRepository
+	notebookRepository     repository.INotebookRepository
+	publisherService       IPublisherService
 	notEmbeddingRepository repository.INoteEmbeddingRepository
-	db *pgxpool.Pool
+	db                     *pgxpool.Pool
 }
 
 func NewNoteService(
-	noteRepository repository.INoteRepository, 
-	notebookRepository repository.INotebookRepository, 
-	publisherService IPublisherService, 
+	noteRepository repository.INoteRepository,
+	notebookRepository repository.INotebookRepository,
+	publisherService IPublisherService,
 	notEmbeddingRepository repository.INoteEmbeddingRepository,
 	db *pgxpool.Pool,
-	) INoteService {
+) INoteService {
 	return &noteService{
-		noteRepository: noteRepository,
-		notebookRepository: notebookRepository,
-		publisherService: publisherService,
+		noteRepository:         noteRepository,
+		notebookRepository:     notebookRepository,
+		publisherService:       publisherService,
 		notEmbeddingRepository: notEmbeddingRepository,
-		db: db,
+		db:                     db,
 	}
 }
 
 func (c *noteService) Create(ctx context.Context, req *dto.CreateNoteRequest) (*dto.CreateNoteResponse, error) {
 
 	note := entity.Note{
-		Id:        uuid.New(),
-		Title:      req.Title,
-		Content:    req.Content,
+		Id:          uuid.New(),
+		Title:       req.Title,
+		Content:     req.Content,
 		Notebook_id: req.Notebook_id,
-		CreateAt:  time.Now(),
+		CreateAt:    time.Now(),
 	}
 
 	err := c.noteRepository.Create(ctx, &note)
@@ -86,15 +86,15 @@ func (c *noteService) Show(ctx context.Context, idParam uuid.UUID) (*dto.ShowNot
 	note, err := c.noteRepository.GetById(ctx, idParam)
 
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
-	
+
 	res := dto.ShowNoteResponse{
-		Id:       note.Id,
-		Title: note.Title,
+		Id:          note.Id,
+		Title:       note.Title,
 		Notebook_id: note.Notebook_id,
-		Content: note.Content,
-		CreateAt: note.CreateAt,
+		Content:     note.Content,
+		CreateAt:    note.CreateAt,
 	}
 
 	return &res, nil
@@ -104,12 +104,13 @@ func (c *noteService) SemanticSearch(ctx context.Context, query string) ([]*dto.
 
 	embeddingRes, err := embedding.GetGeminiEmbedding(
 		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		"models/gemini-embedding-exp-03-07",
 		query,
 		"RETRIEVAL_QUERY",
 	)
 
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
 	noteEmbeddings, err := c.notEmbeddingRepository.SemanticSearch(ctx, embeddingRes.Embedding.Values)
@@ -124,7 +125,7 @@ func (c *noteService) SemanticSearch(ctx context.Context, query string) ([]*dto.
 
 	notes, err := c.noteRepository.GetByIds(ctx, ids)
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
 	response := make([]*dto.SemanticSearchResponse, 0)
@@ -132,12 +133,12 @@ func (c *noteService) SemanticSearch(ctx context.Context, query string) ([]*dto.
 		for _, noteItem := range notes {
 			if n.NoteId == noteItem.Id {
 				response = append(response, &dto.SemanticSearchResponse{
-					Id: noteItem.Id,
-					Title: noteItem.Title,
-					Content: noteItem.Content,
+					Id:         noteItem.Id,
+					Title:      noteItem.Title,
+					Content:    noteItem.Content,
 					NotebookId: noteItem.Notebook_id,
-					CreateAt: noteItem.CreateAt,
-					UpdateAt: noteItem.UpdatedAt,
+					CreateAt:   noteItem.CreateAt,
+					UpdateAt:   noteItem.UpdatedAt,
 				})
 			}
 		}
@@ -150,7 +151,7 @@ func (c *noteService) Update(ctx context.Context, req *dto.UpdateNoteRequest) (*
 
 	note, err := c.noteRepository.GetById(ctx, req.Id)
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
 	now := time.Now()
@@ -222,13 +223,13 @@ func (c *noteService) Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.
 
 	note, err := c.noteRepository.GetById(ctx, req.Id)
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
-	if req.Notebook_id != nil{
+	if req.Notebook_id != nil {
 		_, err = c.notebookRepository.GetById(ctx, *req.Notebook_id)
 		if err != nil {
-			return nil,  err
+			return nil, err
 		}
 	}
 

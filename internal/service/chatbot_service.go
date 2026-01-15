@@ -210,6 +210,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 
 	embeddingRes, err := embedding.GetGeminiEmbedding(
 		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		"models/gemini-embedding-exp-03-07",
 		request.Chat,
 		"RETRIEVAL_QUERY",
 	)

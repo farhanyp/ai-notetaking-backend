@@ -95,6 +95,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 
 	res, err := embedding.GetGeminiEmbedding(
 		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		"models/gemini-embedding-exp-03-07",
 		content,
 		"RETRIEVAL_DOCUMENT",
 	)
