@@ -6,6 +6,7 @@ import (
 	"ai-notetaking-be/internal/repository"
 	"ai-notetaking-be/internal/service"
 	"ai-notetaking-be/pkg/database"
+	garagestorages3 "ai-notetaking-be/pkg/garage-storage-s3"
 	"context"
 	"log"
 	"os"
@@ -26,6 +27,19 @@ func main() {
 	app.Use(cors.New())
 	app.Use(serverutils.ErrorHandlerMiddleware())
 
+	s3Config := garagestorages3.Config{
+		AccessKey: "GKa6721e0667b29e577223abec",
+		SecretKey: "07081a755d954cb3e091e39f2767da276486040ab2cdbc1d50774d71f18b1c48",
+		Endpoint:  "http://127.0.0.1:3900",
+		Region:    "garage",
+	}
+
+	s3Client, err := garagestorages3.NewGarageClient(s3Config)
+	if err != nil {
+		log.Fatalf("Gagal inisialisasi Garage S3: %v", err)
+	}
+	log.Println("✅ Garage S3 Client connected")
+
 	db := database.ConnectDB(os.Getenv("DB_CONNECTION_STRING"))
 
 	exampleRepository := repository.NewExampleRepository(db)
@@ -44,7 +58,7 @@ func main() {
 	)
 
 	consumerService := service.NewConsumerService(
-		pubSub, 
+		pubSub,
 		os.Getenv("EMBED_NOTE_CONTENT_TOPIC_NAME"),
 		noteRepository,
 		noteEmbeddingRepository,
@@ -52,7 +66,7 @@ func main() {
 		db,
 	)
 
-	exampleService := service.NewExampleService(exampleRepository)
+	exampleService := service.NewExampleService(exampleRepository, s3Client)
 	notebookService := service.NewNotebookService(notebookRepository, noteRepository, noteEmbeddingRepository, publisherService, db)
 	noteService := service.NewNoteService(noteRepository, notebookRepository, publisherService, noteEmbeddingRepository, db)
 	chatbotService := service.NewChatbotService(db, chatSessionRepository, chatMessageRepository, chatMessageRawRepository, noteEmbeddingRepository)
@@ -68,7 +82,7 @@ func main() {
 	noteController.RegisterRoutes(api)
 	chatbotController.RegisterRoutes(api)
 
-	err := consumerService.Consume(context.Background())
+	err = consumerService.Consume(context.Background())
 	if err != nil {
 		panic(err)
 	}
