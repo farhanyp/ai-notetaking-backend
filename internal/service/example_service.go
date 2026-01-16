@@ -3,16 +3,11 @@ package service
 import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/repository"
+	garagestorages3 "ai-notetaking-be/pkg/garage-storage-s3"
 	"context"
 	"fmt"
 	"io"
-	"net/http"
-	"path/filepath"
-	"strings"
 	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type IExampleService interface {
@@ -23,10 +18,10 @@ type IExampleService interface {
 
 type exampleService struct {
 	exampleRepository repository.IExampleRepository
-	s3Client          *s3.Client
+	s3Client          *garagestorages3.GarageS3
 }
 
-func NewExampleService(exampleRepository repository.IExampleRepository, s3Client *s3.Client) IExampleService {
+func NewExampleService(exampleRepository repository.IExampleRepository, s3Client *garagestorages3.GarageS3) IExampleService {
 	return &exampleService{
 		exampleRepository: exampleRepository,
 		s3Client:          s3Client,
@@ -45,62 +40,32 @@ func (c *exampleService) HelloWorld(ctx context.Context, req *dto.HelloWorldRequ
 }
 
 func (s *exampleService) UploadFile(ctx context.Context, fileName string, fileContent io.ReadSeeker) (string, error) {
-	bucketName := "test-folder"
-
-	// 1. Deteksi Content-Type secara akurat (berdasarkan isi file)
-	// Kita baca 512 byte pertama untuk menentukan tipe file yang asli
-	buffer := make([]byte, 512)
-	_, err := fileContent.Read(buffer)
-	if err != nil && err != io.EOF {
-		return "", err
-	}
-	contentType := http.DetectContentType(buffer)
-
-	// Kembalikan pointer pembaca ke awal file setelah dibaca buffer-nya
-	fileContent.Seek(0, io.SeekStart)
-
-	// 2. Sanitasi & Unifikasi Nama File
-	// Ganti spasi dengan underscore dan tambahkan timestamp agar tidak menimpa file lama
-	ext := filepath.Ext(fileName)
-	nameOnly := strings.TrimSuffix(fileName, ext)
-	cleanName := strings.ReplaceAll(nameOnly, " ", "_")
-	safeFileName := fmt.Sprintf("%d_%s%s", time.Now().Unix(), cleanName, ext)
-
-	// 3. Upload dengan Metadata ContentType
-	_, err = s.s3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(bucketName),
-		Key:         aws.String(safeFileName),
-		Body:        fileContent,
-		ContentType: aws.String(contentType), // KUNCI: Agar muncul di browser
-	})
-
+	// 1. Validasi MIME type menggunakan helper library
+	isOk, mime, err := s.s3Client.ValidateAllowedMime(fileContent, []string{"image/jpeg", "image/png", "application/pdf"})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("gagal memvalidasi file: %w", err)
+	}
+	if !isOk {
+		return "", fmt.Errorf("tipe file %s tidak diizinkan", mime)
 	}
 
-	return safeFileName, nil
+	// 2. Gunakan fungsi Upload dari library (otomatis sanitasi nama & set Content-Type)
+	// Kita simpan ke bucket "test-folder"
+	safeName, err := s.s3Client.Upload(ctx, "test-folder", fileName, fileContent)
+	if err != nil {
+		return "", fmt.Errorf("gagal mengunggah ke storage: %w", err)
+	}
+
+	return safeName, nil
 }
 
 func (s *exampleService) GetFileUrl(ctx context.Context, fileName string) (string, error) {
-	bucketName := "test-folder"
-
-	// 1. Inisialisasi Presign Client
-	presignClient := s3.NewPresignClient(s.s3Client)
-
-	// 2. Tentukan waktu kadaluarsa (misal: 15 menit)
-	expiration := 15 * time.Minute
-
-	// 3. Minta URL untuk operasi GetObject
-	// Gunakan functional options s3.WithPresignExpires untuk mengatur durasi
-	presignedReq, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(fileName),
-	}, s3.WithPresignExpires(expiration))
-
+	// Panggil fungsi GetPresignedURL yang sudah tersedia di library
+	// Ini jauh lebih bersih daripada menginisialisasi presignClient secara manual di sini
+	url, err := s.s3Client.GetPresignedURL(ctx, "test-folder", fileName, 15*time.Minute)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("gagal mendapatkan URL file: %w", err)
 	}
 
-	// Hasilnya ada di field URL
-	return presignedReq.URL, nil
+	return url, nil
 }

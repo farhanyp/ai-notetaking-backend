@@ -28,17 +28,16 @@ func main() {
 	app.Use(serverutils.ErrorHandlerMiddleware())
 
 	s3Config := garagestorages3.Config{
-		AccessKey: "GKa6721e0667b29e577223abec",
-		SecretKey: "07081a755d954cb3e091e39f2767da276486040ab2cdbc1d50774d71f18b1c48",
-		Endpoint:  "http://127.0.0.1:3900",
-		Region:    "garage",
+		AccessKey: os.Getenv("GARAGE_S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("GARAGE_S3_SECRET_KEY"),
+		Endpoint:  os.Getenv("REGION"),
+		Region:    os.Getenv("BASE_URL"),
 	}
 
 	s3Client, err := garagestorages3.NewGarageClient(s3Config)
 	if err != nil {
-		log.Fatalf("Gagal inisialisasi Garage S3: %v", err)
+		panic(err)
 	}
-	log.Println("✅ Garage S3 Client connected")
 
 	db := database.ConnectDB(os.Getenv("DB_CONNECTION_STRING"))
 
