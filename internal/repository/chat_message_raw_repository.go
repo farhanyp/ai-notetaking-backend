@@ -35,9 +35,9 @@ func (n *chatmessagerawRepository) Create(ctx context.Context, chatMessageRaw *e
 		chatMessageRaw.Role,
 		chatMessageRaw.Chat,
 		chatMessageRaw.ChatSessionId,
-		chatMessageRaw.CreateAt,
+		chatMessageRaw.CreatedAt,
 		chatMessageRaw.UpdatedAt,
-		chatMessageRaw.DeleteAt,
+		chatMessageRaw.DeletedAt,
 		chatMessageRaw.IsDeleted,
 	)
 	if err != nil {
@@ -47,7 +47,7 @@ func (n *chatmessagerawRepository) Create(ctx context.Context, chatMessageRaw *e
 	return nil
 }
 
-func (n *chatmessagerawRepository) GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessageRaw, error)  {
+func (n *chatmessagerawRepository) GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessageRaw, error) {
 	rows, err := n.db.Query(
 		ctx,
 		`SELECT id, role, chat, session_chat_id, created_at, updated_at, deleted_at, is_deleted FROM chat_message_raw WHERE session_chat_id = $1 AND is_deleted = false ORDER BY created_at ASC`,
@@ -55,7 +55,7 @@ func (n *chatmessagerawRepository) GetChatBySessionId(ctx context.Context, sessi
 	)
 
 	res := make([]*entity.ChatMessageRaw, 0)
-	
+
 	for rows.Next() {
 		var chatMessage entity.ChatMessageRaw
 		err := rows.Scan(
@@ -63,9 +63,9 @@ func (n *chatmessagerawRepository) GetChatBySessionId(ctx context.Context, sessi
 			&chatMessage.Role,
 			&chatMessage.Chat,
 			&chatMessage.ChatSessionId,
-			&chatMessage.CreateAt,
+			&chatMessage.CreatedAt,
 			&chatMessage.UpdatedAt,
-			&chatMessage.DeleteAt,
+			&chatMessage.DeletedAt,
 			&chatMessage.IsDeleted,
 		)
 		if err != nil {

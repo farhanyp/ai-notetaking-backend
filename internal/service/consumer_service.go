@@ -67,7 +67,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		panic(err)
 	}
 
-	notebook, err := cs.notebookRepository.GetById(ctx, note.Notebook_id)
+	notebook, err := cs.notebookRepository.GetById(ctx, note.NotebookId)
 	if err != nil {
 		panic(err)
 	}
@@ -89,7 +89,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		note.Title,
 		notebook.Name,
 		note.Content,
-		note.CreateAt.Format(time.RFC3339),
+		note.CreatedAt.Format(time.RFC3339),
 		noteUpdatedAt,
 	)
 
@@ -105,10 +105,10 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 
 	noteEmbedding := entity.NoteEmbedding{
 		Id:             uuid.New(),
-		Document:       content,
+		ChunkContent:   content,
 		EmbeddingValue: res.Embedding.Values,
 		NoteId:         note.Id,
-		CreateAt:       time.Now(),
+		CreatedAt:      time.Now(),
 	}
 
 	tx, err := cs.db.Begin(ctx)

@@ -56,31 +56,31 @@ func (n *notebookRepository) GetAll(ctx context.Context) ([]*entity.Notebook, er
 		err = rows.Scan(
 			&notebook.Id,
 			&notebook.Name,
-			&notebook.Parent_id,
-			&notebook.CreateAt,
+			&notebook.ParentId,
+			&notebook.CreatedAt,
 			&notebook.UpdatedAt,
 		)
 
-		if err != nil{
+		if err != nil {
 			return nil, err
 		}
 
 		result = append([]*entity.Notebook{&notebook}, result...)
 	}
 
-	return result,nil
+	return result, nil
 }
 
 func (n *notebookRepository) Create(ctx context.Context, notebook *entity.Notebook) error {
-	_ , err := n.db.Exec(
+	_, err := n.db.Exec(
 		ctx,
 		`INSERT INTO notebook (id, name, parent_id, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6 , $7)`,
 		notebook.Id,
 		notebook.Name,
-		notebook.Parent_id,
-		notebook.CreateAt,
+		notebook.ParentId,
+		notebook.CreatedAt,
 		notebook.UpdatedAt,
-		notebook.DeleteAt,
+		notebook.DeletedAt,
 		notebook.IsDeleted,
 	)
 
@@ -92,7 +92,7 @@ func (n *notebookRepository) Create(ctx context.Context, notebook *entity.Notebo
 }
 
 func (n *notebookRepository) Update(ctx context.Context, notebook *entity.Notebook) error {
-	_ , err := n.db.Exec(
+	_, err := n.db.Exec(
 		ctx,
 		`UPDATE notebook SET 
 		name = $1, 
@@ -101,7 +101,7 @@ func (n *notebookRepository) Update(ctx context.Context, notebook *entity.Notebo
 		WHERE id = $4`,
 
 		notebook.Name,
-		notebook.Parent_id,
+		notebook.ParentId,
 		notebook.UpdatedAt,
 		notebook.Id,
 	)
@@ -125,10 +125,10 @@ func (n *notebookRepository) GetById(ctx context.Context, id uuid.UUID) (*entity
 	err := row.Scan(
 		&notebook.Id,
 		&notebook.Name,
-		&notebook.Parent_id,
-		&notebook.CreateAt,
+		&notebook.ParentId,
+		&notebook.CreatedAt,
 		&notebook.UpdatedAt,
-		&notebook.DeleteAt,
+		&notebook.DeletedAt,
 		&notebook.IsDeleted,
 	)
 
@@ -187,5 +187,3 @@ func (n *notebookRepository) Move(ctx context.Context, id uuid.UUID, parent_id *
 
 	return nil
 }
-
-

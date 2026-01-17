@@ -26,10 +26,15 @@ func ErrorHandlerMiddleware() fiber.Handler {
 			return nil
 		}
 
+		// 1. Handle Known Business Logic Errors
 		if errors.Is(err, ErrNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(ErrorResponse(
-				fiber.StatusNotFound, "Entity not found",
-			))
+			return c.Status(fiber.StatusNotFound).JSON(ErrorResponse(fiber.StatusNotFound, err.Error()))
+		}
+		if errors.Is(err, ErrInvalidFile) {
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse(fiber.StatusBadRequest, err.Error()))
+		}
+		if errors.Is(err, ErrUnauthorized) {
+			return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse(fiber.StatusUnauthorized, err.Error()))
 		}
 
 		if fiberErr, ok := err.(*fiber.Error); ok {

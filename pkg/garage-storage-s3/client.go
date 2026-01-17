@@ -108,6 +108,21 @@ func (g *GarageS3) Delete(ctx context.Context, bucket, key string) error {
 	return err
 }
 
+// Download mengambil file dari S3 dan mengembalikannya sebagai io.ReadCloser
+// Jangan lupa untuk memanggil .Close() setelah selesai digunakan untuk mencegah memory leak
+func (g *GarageS3) Download(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
+	result, err := g.Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file from s3: %w", err)
+	}
+
+	return result.Body, nil
+}
+
 // ---------------------------------------------------------
 // HELPER FUNCTIONS (Independent)
 // ---------------------------------------------------------
@@ -155,4 +170,34 @@ func (g *GarageS3) ValidateAllowedMime(content io.ReadSeeker, allowedTypes []str
 		}
 	}
 	return false, mimeType, nil
+}
+
+func (g *GarageS3) GetFileSize(content io.ReadSeeker) (int64, error) {
+	// Move cursor to the end to get the offset (size)
+	size, err := content.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, err
+	}
+
+	// IMPORTANT: Reset cursor back to the beginning so other functions can read it
+	_, err = content.Seek(0, io.SeekStart)
+	if err != nil {
+		return 0, err
+	}
+
+	return size, nil
+}
+
+// ValidateFileSize checks if the file is within the allowed limit (in bytes)
+func (g *GarageS3) ValidateFileSize(content io.ReadSeeker, maxSizeBytes int64) (bool, int64, error) {
+	size, err := g.GetFileSize(content)
+	if err != nil {
+		return false, 0, err
+	}
+
+	if size > maxSizeBytes {
+		return false, size, nil
+	}
+
+	return true, size, nil
 }

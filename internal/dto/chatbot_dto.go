@@ -13,7 +13,7 @@ type CreateSessionResponse struct {
 type GetAllSessionResponse struct {
 	Id        uuid.UUID  `json:"id"`
 	Name      string     `json:"name"`
-	CreateAt  time.Time  `json:"created_at"`
+	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 }
 

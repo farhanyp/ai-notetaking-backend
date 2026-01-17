@@ -36,12 +36,12 @@ func (n *noteEmbeddingRepository) Create(ctx context.Context, noteEmbedding *ent
 		`INSERT INTO note_embedding (id, document, embedding_value, note_id, created_at, updated_at, deleted_at, is_deleted)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		noteEmbedding.Id,
-		noteEmbedding.Document,
+		noteEmbedding.ChunkContent,
 		pgvector.NewVector(noteEmbedding.EmbeddingValue),
 		noteEmbedding.NoteId,
-		noteEmbedding.CreateAt,
+		noteEmbedding.CreatedAt,
 		noteEmbedding.UpdatedAt,
-		noteEmbedding.DeleteAt,
+		noteEmbedding.DeletedAt,
 		noteEmbedding.IsDeleted,
 	)
 
@@ -123,7 +123,7 @@ func (n *noteEmbeddingRepository) SearchSimilarity(ctx context.Context, embeddin
 		var noteEmbedding entity.NoteEmbedding
 		err := rows.Scan(
 			&noteEmbedding.Id,
-			&noteEmbedding.Document,
+			&noteEmbedding.ChunkContent,
 		)
 		if err != nil {
 			return nil, err

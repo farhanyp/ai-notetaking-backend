@@ -7,10 +7,10 @@ import (
 )
 
 type ChatSession struct {
-	Id uuid.UUID
-	Title string
-	CreateAt time.Time
+	Id        uuid.UUID
+	Title     string
+	CreatedAt time.Time
 	UpdatedAt *time.Time
-	DeleteAt *time.Time
+	DeletedAt *time.Time
 	IsDeleted bool
 }

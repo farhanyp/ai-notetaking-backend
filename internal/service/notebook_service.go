@@ -22,26 +22,26 @@ type INotebookService interface {
 }
 
 type notebookService struct {
-	notebookRepository repository.INotebookRepository
-	noteRepository repository.INoteRepository
+	notebookRepository      repository.INotebookRepository
+	noteRepository          repository.INoteRepository
 	noteEmbeddingRepository repository.INoteEmbeddingRepository
-	publisherService IPublisherService
+	publisherService        IPublisherService
 
 	db *pgxpool.Pool
 }
 
 func NewNotebookService(
-	notebookRepository repository.INotebookRepository, 
-	noteRepository repository.INoteRepository, 
+	notebookRepository repository.INotebookRepository,
+	noteRepository repository.INoteRepository,
 	noteEmbeddingRepository repository.INoteEmbeddingRepository,
 	publisherService IPublisherService,
 	db *pgxpool.Pool) INotebookService {
 	return &notebookService{
-		notebookRepository: notebookRepository,
-		noteRepository: noteRepository,
+		notebookRepository:      notebookRepository,
+		noteRepository:          noteRepository,
 		noteEmbeddingRepository: noteEmbeddingRepository,
-		publisherService: publisherService,
-		db: db,
+		publisherService:        publisherService,
+		db:                      db,
 	}
 }
 
@@ -56,12 +56,12 @@ func (c *notebookService) GetAll(ctx context.Context) ([]*dto.ListNotebookRespon
 	result := make([]*dto.ListNotebookResponse, 0)
 	for _, notebook := range notebooks {
 		res := dto.ListNotebookResponse{
-			Id: notebook.Id,
-			Name: notebook.Name,
-			Parent_id: notebook.Parent_id,
-			CreateAt: notebook.CreateAt,
-			UpdateAt: notebook.UpdatedAt,
-			Notes: make([]*dto.GetAllNotebookResponseNote, 0),
+			Id:        notebook.Id,
+			Name:      notebook.Name,
+			ParentId:  notebook.ParentId,
+			CreatedAt: notebook.CreatedAt,
+			UpdateAt:  notebook.UpdatedAt,
+			Notes:     make([]*dto.GetAllNotebookResponseNote, 0),
 		}
 
 		result = append([]*dto.ListNotebookResponse{&res}, result...)
@@ -69,24 +69,24 @@ func (c *notebookService) GetAll(ctx context.Context) ([]*dto.ListNotebookRespon
 	}
 
 	notes, err := c.noteRepository.GetByNotesIds(ctx, ids)
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 
 	for i := 0; i < len(result); i++ {
 		for j := 0; j < len(notes); j++ {
-			if notes[j].Notebook_id == result[i].Id{
+			if notes[j].NotebookId == result[i].Id {
 				result[i].Notes = append(result[i].Notes, &dto.GetAllNotebookResponseNote{
-					Id: notes[j].Id,
-					Title: notes[j].Title,
-					Content: notes[j].Content,
-					CreateAt: notes[j].CreateAt,
-					UpdateAt: notes[j].UpdatedAt,
+					Id:        notes[j].Id,
+					Title:     notes[j].Title,
+					Content:   notes[j].Content,
+					CreatedAt: notes[j].CreatedAt,
+					UpdateAt:  notes[j].UpdatedAt,
 				})
 			}
-			
+
 		}
-		
+
 	}
 
 	return result, nil
@@ -97,8 +97,8 @@ func (c *notebookService) Create(ctx context.Context, req *dto.CreateNotebookReq
 	notebook := entity.Notebook{
 		Id:        uuid.New(),
 		Name:      req.Name,
-		Parent_id: req.Parent_id,
-		CreateAt:  time.Now(),
+		ParentId:  req.ParentId,
+		CreatedAt: time.Now(),
 	}
 
 	err := c.notebookRepository.Create(ctx, &notebook)
@@ -115,7 +115,7 @@ func (c *notebookService) Update(ctx context.Context, req *dto.UpdateNotebookReq
 
 	notebook, err := c.notebookRepository.GetById(ctx, req.Id)
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
 	now := time.Now()
@@ -133,7 +133,7 @@ func (c *notebookService) Update(ctx context.Context, req *dto.UpdateNotebookReq
 	}
 
 	for _, note := range notes {
-		msg := dto.PublishEmbedNoteMessage {
+		msg := dto.PublishEmbedNoteMessage{
 			NotedId: note.Id,
 		}
 
@@ -147,7 +147,6 @@ func (c *notebookService) Update(ctx context.Context, req *dto.UpdateNotebookReq
 			return nil, err
 		}
 
-
 	}
 
 	return &dto.UpdateNotebookResponse{
@@ -159,17 +158,17 @@ func (c *notebookService) Move(ctx context.Context, req *dto.MoveNotebookRequest
 
 	_, err := c.notebookRepository.GetById(ctx, req.Id)
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 
-	if req.Parent_id != nil{
-		_, err = c.notebookRepository.GetById(ctx, *req.Parent_id)
+	if req.ParentId != nil {
+		_, err = c.notebookRepository.GetById(ctx, *req.ParentId)
 		if err != nil {
-			return nil,  err
+			return nil, err
 		}
 	}
 
-	err = c.notebookRepository.Move(ctx, req.Id, req.Parent_id)
+	err = c.notebookRepository.Move(ctx, req.Id, req.ParentId)
 	if err != nil {
 		return nil, err
 	}
@@ -184,14 +183,14 @@ func (c *notebookService) Show(ctx context.Context, idParam uuid.UUID) (*dto.Sho
 	notebook, err := c.notebookRepository.GetById(ctx, idParam)
 
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
-	
+
 	res := dto.ShowNotebookResponse{
-		Id:       notebook.Id,
-		Name:     notebook.Name,
-		Parent_id: notebook.Parent_id,
-		CreateAt: notebook.CreateAt,
+		Id:        notebook.Id,
+		Name:      notebook.Name,
+		ParentId:  notebook.ParentId,
+		CreatedAt: notebook.CreatedAt,
 	}
 
 	return &res, nil

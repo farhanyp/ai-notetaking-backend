@@ -7,8 +7,8 @@ import (
 )
 
 type CreateNotebookRequest struct {
-	Name string `json:"name" validate:"required"`
-	Parent_id *uuid.UUID `json:"parent_id"`
+	Name     string     `json:"name" validate:"required"`
+	ParentId *uuid.UUID `json:"parent_id"`
 }
 
 type CreateNotebookResponse struct {
@@ -16,7 +16,7 @@ type CreateNotebookResponse struct {
 }
 
 type UpdateNotebookRequest struct {
-	Id uuid.UUID
+	Id   uuid.UUID
 	Name string `json:"name" validate:"required"`
 }
 
@@ -25,8 +25,8 @@ type UpdateNotebookResponse struct {
 }
 
 type MoveNotebookRequest struct {
-	Id uuid.UUID
-	Parent_id *uuid.UUID `json:"Parent_id"`
+	Id       uuid.UUID
+	ParentId *uuid.UUID `json:"Parent_id"`
 }
 
 type MoveNotebookResponse struct {
@@ -34,26 +34,26 @@ type MoveNotebookResponse struct {
 }
 
 type ShowNotebookResponse struct {
-	Id      uuid.UUID `json:"id"`
-	Name	string `json:"name"`
-	Parent_id *uuid.UUID `json:"parent_id"`
-	CreateAt time.Time `json:"created_at"`
+	Id        uuid.UUID  `json:"id"`
+	Name      string     `json:"name"`
+	ParentId  *uuid.UUID `json:"parent_id"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type ListNotebookResponse struct {
-	Id      uuid.UUID `json:"id"`
-	Name	string `json:"name"`
-	Parent_id *uuid.UUID `json:"parent_id"`
-	CreateAt time.Time `json:"created_at"`
-	UpdateAt *time.Time `json:"updated_at"`
+	Id        uuid.UUID  `json:"id"`
+	Name      string     `json:"name"`
+	ParentId  *uuid.UUID `json:"parent_id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdateAt  *time.Time `json:"updated_at"`
 
 	Notes []*GetAllNotebookResponseNote `json:"notes"`
 }
 
 type GetAllNotebookResponseNote struct {
-	Id      uuid.UUID `json:"id"`
-	Title	string `json:"title"`
-	Content	string `json:"content"`
-	CreateAt time.Time `json:"created_at"`
-	UpdateAt *time.Time `json:"updated_at"`
+	Id        uuid.UUID  `json:"id"`
+	Title     string     `json:"title"`
+	Content   string     `json:"content"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdateAt  *time.Time `json:"updated_at"`
 }

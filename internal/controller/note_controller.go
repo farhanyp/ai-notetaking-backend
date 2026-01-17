@@ -16,6 +16,8 @@ type INoteController interface {
 	Show(ctx *fiber.Ctx) error
 	Update(ctx *fiber.Ctx) error
 	Delete(ctx *fiber.Ctx) error
+	GetExtractPreview(ctx *fiber.Ctx) error
+	ConfirmExtraction(ctx *fiber.Ctx) error
 }
 
 type noteController struct {
@@ -34,6 +36,9 @@ func (c *noteController) RegisterRoutes(r fiber.Router) {
 	h.Put("/note/:id", c.Update)
 	h.Delete("/note/:id", c.Delete)
 	h.Put("/note/:id/move", c.Move)
+	h.Get("/note/:id/extract-preview", c.GetExtractPreview)
+	h.Put("/note/:id/confirm-extraction", c.ConfirmExtraction)
+
 }
 
 func (c *noteController) Create(ctx *fiber.Ctx) error {
@@ -135,4 +140,51 @@ func (c *noteController) Move(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.JSON(serverutils.SuccessResponse("Success Move Notebook", res))
+}
+
+func (c *noteController) GetExtractPreview(ctx *fiber.Ctx) error {
+	idParam := ctx.Params("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid UUID format")
+	}
+
+	// Memanggil service untuk download dan ekstraksi AI
+	extractedText, err := c.service.ExtractPreview(ctx.Context(), id)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success extract preview", fiber.Map{
+		"note_id":        id,
+		"extracted_text": extractedText,
+	}))
+}
+
+func (c *noteController) ConfirmExtraction(ctx *fiber.Ctx) error {
+	idParam := ctx.Params("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid UUID format")
+	}
+
+	var req dto.UpdateNoteRequest
+	if err := ctx.BodyParser(&req); err != nil {
+		return err
+	}
+	req.Id = id
+
+	// Validasi konten teks hasil edit user
+	err = serverutils.ValidateRequest(req)
+	if err != nil {
+		return err
+	}
+
+	// Update DB dan trigger re-embedding
+	res, err := c.service.UpdateFromExtraction(ctx.Context(), &req)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success confirm and update extraction", res))
 }

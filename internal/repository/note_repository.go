@@ -43,16 +43,16 @@ func (n *noteRepository) UsingTx(ctx context.Context, tx database.DatabaseQuerye
 }
 
 func (n *noteRepository) Create(ctx context.Context, note *entity.Note) error {
-	_ , err := n.db.Exec(
+	_, err := n.db.Exec(
 		ctx,
 		`INSERT INTO note (id, title, content, notebook_id, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6 , $7 , $8)`,
 		note.Id,
 		note.Title,
 		note.Content,
-		note.Notebook_id,
-		note.CreateAt,
+		note.NotebookId,
+		note.CreatedAt,
 		note.UpdatedAt,
-		note.DeleteAt,
+		note.DeletedAt,
 		note.IsDeleted,
 	)
 
@@ -76,10 +76,10 @@ func (n *noteRepository) GetById(ctx context.Context, id uuid.UUID) (*entity.Not
 		&note.Id,
 		&note.Title,
 		&note.Content,
-		&note.Notebook_id,
-		&note.CreateAt,
+		&note.NotebookId,
+		&note.CreatedAt,
 		&note.UpdatedAt,
-		&note.DeleteAt,
+		&note.DeletedAt,
 		&note.IsDeleted,
 	)
 
@@ -94,7 +94,7 @@ func (n *noteRepository) GetById(ctx context.Context, id uuid.UUID) (*entity.Not
 }
 
 func (n *noteRepository) Update(ctx context.Context, note *entity.Note) error {
-	_ , err := n.db.Exec(
+	_, err := n.db.Exec(
 		ctx,
 		`UPDATE note SET 
 		title = $1,
@@ -105,7 +105,7 @@ func (n *noteRepository) Update(ctx context.Context, note *entity.Note) error {
 
 		note.Title,
 		note.Content,
-		note.Notebook_id,
+		note.NotebookId,
 		note.UpdatedAt,
 		note.Id,
 	)
@@ -159,29 +159,29 @@ func (n *noteRepository) GetByNotesIds(ctx context.Context, ids []uuid.UUID) ([]
 	}
 	idSqlFormat := strings.Join(idStr, ", ")
 
-	rows, err :=  n.db.Query(
+	rows, err := n.db.Query(
 		ctx,
 		fmt.Sprintf(`SELECT id, title, content, notebook_id, created_at, updated_at FROM note WHERE notebook_id IN (%s) AND is_deleted = false`, idSqlFormat),
 	)
 
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 
 	result := make([]*entity.Note, 0)
-	for rows.Next(){
+	for rows.Next() {
 		var note entity.Note
 
 		err = rows.Scan(
 			&note.Id,
 			&note.Title,
 			&note.Content,
-			&note.Notebook_id,
-			&note.CreateAt,
+			&note.NotebookId,
+			&note.CreatedAt,
 			&note.UpdatedAt,
 		)
-		
-		if err != nil{
+
+		if err != nil {
 			return nil, err
 		}
 
@@ -203,29 +203,29 @@ func (n *noteRepository) GetByIds(ctx context.Context, ids []uuid.UUID) ([]*enti
 	}
 	idSqlFormat := strings.Join(idStr, ", ")
 
-	rows, err :=  n.db.Query(
+	rows, err := n.db.Query(
 		ctx,
 		fmt.Sprintf(`SELECT id, title, content, notebook_id, created_at, updated_at FROM note WHERE id IN (%s) AND is_deleted = false`, idSqlFormat),
 	)
 
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 
 	result := make([]*entity.Note, 0)
-	for rows.Next(){
+	for rows.Next() {
 		var note entity.Note
 
 		err = rows.Scan(
 			&note.Id,
 			&note.Title,
 			&note.Content,
-			&note.Notebook_id,
-			&note.CreateAt,
+			&note.NotebookId,
+			&note.CreatedAt,
 			&note.UpdatedAt,
 		)
-		
-		if err != nil{
+
+		if err != nil {
 			return nil, err
 		}
 

@@ -30,8 +30,8 @@ func main() {
 	s3Config := garagestorages3.Config{
 		AccessKey: os.Getenv("GARAGE_S3_ACCESS_KEY"),
 		SecretKey: os.Getenv("GARAGE_S3_SECRET_KEY"),
-		Endpoint:  os.Getenv("REGION"),
-		Region:    os.Getenv("BASE_URL"),
+		Endpoint:  os.Getenv("BASE_URL"),
+		Region:    os.Getenv("REGION"),
 	}
 
 	s3Client, err := garagestorages3.NewGarageClient(s3Config)
@@ -42,6 +42,7 @@ func main() {
 	db := database.ConnectDB(os.Getenv("DB_CONNECTION_STRING"))
 
 	exampleRepository := repository.NewExampleRepository(db)
+	fileRepository := repository.NewFileRepository(db)
 	notebookRepository := repository.NewNotebookRepository(db)
 	noteRepository := repository.NewNoteRepository(db)
 	noteEmbeddingRepository := repository.NewNoteEmbeddingRepository(db)
@@ -67,19 +68,22 @@ func main() {
 
 	exampleService := service.NewExampleService(exampleRepository, s3Client)
 	notebookService := service.NewNotebookService(notebookRepository, noteRepository, noteEmbeddingRepository, publisherService, db)
-	noteService := service.NewNoteService(noteRepository, notebookRepository, publisherService, noteEmbeddingRepository, db)
+	noteService := service.NewNoteService(noteRepository, notebookRepository, fileRepository, s3Client, publisherService, noteEmbeddingRepository, db)
 	chatbotService := service.NewChatbotService(db, chatSessionRepository, chatMessageRepository, chatMessageRawRepository, noteEmbeddingRepository)
+	fileService := service.NewFileService(noteRepository, fileRepository, s3Client)
 
 	exampleController := controller.NewExampleController(exampleService)
 	notebookController := controller.NewNotebookController(notebookService)
 	noteController := controller.NewNoteController(noteService)
 	chatbotController := controller.NewChatController(chatbotService)
+	fileController := controller.NewFileController(fileService)
 
 	api := app.Group("/api")
 	exampleController.RegisterRoutes(api)
 	notebookController.RegisterRoutes(api)
 	noteController.RegisterRoutes(api)
 	chatbotController.RegisterRoutes(api)
+	fileController.RegisterRoutes(api)
 
 	err = consumerService.Consume(context.Background())
 	if err != nil {

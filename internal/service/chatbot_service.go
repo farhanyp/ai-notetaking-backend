@@ -53,9 +53,9 @@ func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionR
 
 	now := time.Now()
 	chatSession := &entity.ChatSession{
-		Id:       uuid.New(),
-		Title:    "Unamed session",
-		CreateAt: now,
+		Id:        uuid.New(),
+		Title:     "Unamed session",
+		CreatedAt: now,
 	}
 
 	chatMessage := &entity.ChatMessage{
@@ -63,7 +63,7 @@ func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionR
 		Chat:          "Hi, how can i help you ?",
 		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: chatSession.Id,
-		CreateAt:      now,
+		CreatedAt:     now,
 	}
 
 	chatMessageRawUser := &entity.ChatMessageRaw{
@@ -71,7 +71,7 @@ func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionR
 		Chat:          constant.ChatMessageRawInititalUserPromptV1,
 		Role:          constant.ChatMessageRoleUser,
 		ChatSessionId: chatSession.Id,
-		CreateAt:      now,
+		CreatedAt:     now,
 	}
 
 	chatMessageRawModel := &entity.ChatMessageRaw{
@@ -79,7 +79,7 @@ func (c *chatbotService) CreateSession(ctx context.Context) (*dto.CreateSessionR
 		Chat:          constant.ChatMessageRawInititalModelPromptV1,
 		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: chatSession.Id,
-		CreateAt:      now,
+		CreatedAt:     now,
 	}
 
 	tx, err := c.db.Begin(ctx)
@@ -137,7 +137,7 @@ func (c *chatbotService) GetAllSession(ctx context.Context) ([]*dto.GetAllSessio
 		response = append(response, &dto.GetAllSessionResponse{
 			Id:        sessions.Id,
 			Name:      sessions.Title,
-			CreateAt:  sessions.CreateAt,
+			CreatedAt: sessions.CreatedAt,
 			UpdatedAt: sessions.UpdatedAt,
 		})
 
@@ -165,7 +165,7 @@ func (c *chatbotService) GetChatHistory(ctx context.Context, sessionId uuid.UUID
 			Id:        sessions.Id,
 			Role:      sessions.Role,
 			Chat:      sessions.Chat,
-			CreatedAt: sessions.CreateAt,
+			CreatedAt: sessions.CreatedAt,
 		})
 
 	}
@@ -205,7 +205,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		Chat:          request.Chat,
 		Role:          constant.ChatMessageRoleUser,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt:      now,
+		CreatedAt:     now,
 	}
 
 	embeddingRes, err := embedding.GetGeminiEmbedding(
@@ -259,7 +259,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 
 		for i, noteEmbeding := range noteEmbeddings {
 			strBuilder.WriteString(fmt.Sprintf("Reference %d\n", i+1))
-			strBuilder.WriteString(noteEmbeding.Document)
+			strBuilder.WriteString(noteEmbeding.ChunkContent)
 			strBuilder.WriteString("\n\n")
 		}
 
@@ -275,7 +275,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		Chat:          strBuilder.String(),
 		Role:          constant.ChatMessageRoleUser,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt:      now,
+		CreatedAt:     now,
 	}
 
 	ExistingChatRaw = append(
@@ -306,7 +306,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		Chat:          reply,
 		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt:      now.Add(1 * time.Millisecond),
+		CreatedAt:     now.Add(1 * time.Millisecond),
 	}
 
 	chatMessageRawModel := entity.ChatMessageRaw{
@@ -314,7 +314,7 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 		Chat:          reply,
 		Role:          constant.ChatMessageRoleModel,
 		ChatSessionId: request.ChatSessionId,
-		CreateAt:      now.Add(1 * time.Millisecond),
+		CreatedAt:     now.Add(1 * time.Millisecond),
 	}
 
 	chatMessageRepository.Create(ctx, &chatMessageUser)
@@ -344,13 +344,13 @@ func (c *chatbotService) SendChat(ctx context.Context, request *dto.SendChatRequ
 			Id:        chatMessageUser.Id,
 			Chat:      chatMessageUser.Chat,
 			Role:      chatMessageUser.Role,
-			CreatedAt: chatMessageUser.CreateAt,
+			CreatedAt: chatMessageUser.CreatedAt,
 		},
 		Reply: &dto.SendChatResponseChat{
 			Id:        chatMessageModel.Id,
 			Chat:      chatMessageModel.Chat,
 			Role:      chatMessageModel.Role,
-			CreatedAt: chatMessageModel.CreateAt,
+			CreatedAt: chatMessageModel.CreatedAt,
 		},
 	}, nil
 }

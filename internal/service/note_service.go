@@ -3,10 +3,13 @@ package service
 import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
+	"ai-notetaking-be/internal/pkg/serverutils"
 	"ai-notetaking-be/internal/repository"
 	"ai-notetaking-be/pkg/embedding"
+	garagestorages3 "ai-notetaking-be/pkg/garage-storage-s3"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -21,11 +24,15 @@ type INoteService interface {
 	Update(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error)
 	Delete(ctx context.Context, idParam uuid.UUID) error
 	Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.MoveNoteResponse, error)
+	ExtractPreview(ctx context.Context, noteId uuid.UUID) (string, error)
+	UpdateFromExtraction(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error)
 }
 
 type noteService struct {
 	noteRepository         repository.INoteRepository
 	notebookRepository     repository.INotebookRepository
+	fileRepository         repository.IFileRepository
+	s3Client               *garagestorages3.GarageS3
 	publisherService       IPublisherService
 	notEmbeddingRepository repository.INoteEmbeddingRepository
 	db                     *pgxpool.Pool
@@ -34,6 +41,8 @@ type noteService struct {
 func NewNoteService(
 	noteRepository repository.INoteRepository,
 	notebookRepository repository.INotebookRepository,
+	fileRepository repository.IFileRepository,
+	s3Client *garagestorages3.GarageS3,
 	publisherService IPublisherService,
 	notEmbeddingRepository repository.INoteEmbeddingRepository,
 	db *pgxpool.Pool,
@@ -41,6 +50,8 @@ func NewNoteService(
 	return &noteService{
 		noteRepository:         noteRepository,
 		notebookRepository:     notebookRepository,
+		fileRepository:         fileRepository,
+		s3Client:               s3Client,
 		publisherService:       publisherService,
 		notEmbeddingRepository: notEmbeddingRepository,
 		db:                     db,
@@ -50,11 +61,11 @@ func NewNoteService(
 func (c *noteService) Create(ctx context.Context, req *dto.CreateNoteRequest) (*dto.CreateNoteResponse, error) {
 
 	note := entity.Note{
-		Id:          uuid.New(),
-		Title:       req.Title,
-		Content:     req.Content,
-		Notebook_id: req.Notebook_id,
-		CreateAt:    time.Now(),
+		Id:         uuid.New(),
+		Title:      req.Title,
+		Content:    req.Content,
+		NotebookId: req.NotebookId,
+		CreatedAt:  time.Now(),
 	}
 
 	err := c.noteRepository.Create(ctx, &note)
@@ -90,11 +101,11 @@ func (c *noteService) Show(ctx context.Context, idParam uuid.UUID) (*dto.ShowNot
 	}
 
 	res := dto.ShowNoteResponse{
-		Id:          note.Id,
-		Title:       note.Title,
-		Notebook_id: note.Notebook_id,
-		Content:     note.Content,
-		CreateAt:    note.CreateAt,
+		Id:         note.Id,
+		Title:      note.Title,
+		NotebookId: note.NotebookId,
+		Content:    note.Content,
+		CreatedAt:  note.CreatedAt,
 	}
 
 	return &res, nil
@@ -136,8 +147,8 @@ func (c *noteService) SemanticSearch(ctx context.Context, query string) ([]*dto.
 					Id:         noteItem.Id,
 					Title:      noteItem.Title,
 					Content:    noteItem.Content,
-					NotebookId: noteItem.Notebook_id,
-					CreateAt:   noteItem.CreateAt,
+					NotebookId: noteItem.NotebookId,
+					CreatedAt:  noteItem.CreatedAt,
 					UpdateAt:   noteItem.UpdatedAt,
 				})
 			}
@@ -226,15 +237,15 @@ func (c *noteService) Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.
 		return nil, err
 	}
 
-	if req.Notebook_id != nil {
-		_, err = c.notebookRepository.GetById(ctx, *req.Notebook_id)
+	if req.NotebookId != nil {
+		_, err = c.notebookRepository.GetById(ctx, *req.NotebookId)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	now := time.Now()
-	note.Notebook_id = *req.Notebook_id
+	note.NotebookId = *req.NotebookId
 	note.UpdatedAt = &now
 
 	err = c.noteRepository.Update(ctx, note)
@@ -259,4 +270,65 @@ func (c *noteService) Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.
 	return &dto.MoveNoteResponse{
 		Id: req.Id,
 	}, nil
+}
+
+func (s *noteService) ExtractPreview(ctx context.Context, noteId uuid.UUID) (string, error) {
+	// 1. Cek Note di Database
+	note, err := s.noteRepository.GetById(ctx, noteId)
+	if err != nil {
+		return "", err // Mengembalikan serverutils.ErrNotFound jika tidak ada
+	}
+
+	// 2. Ambil Metadata File (Asumsi Anda punya FileRepository)
+	fileMeta, err := s.fileRepository.GetByNoteId(ctx, note.Id)
+	if err != nil {
+		return "", fmt.Errorf("no file associated with this note: %w", err)
+	}
+
+	// 3. Download file dari Garage S3
+	body, err := s.s3Client.Download(ctx, fileMeta.Bucket, fileMeta.FileName)
+	if err != nil {
+		return "", err
+	}
+	defer body.Close() // Sangat penting!
+
+	// 4. Proses Ekstraksi (Pilih salah satu metode)
+
+	// Contoh jika menggunakan LangChainGo atau library PDF langsung:
+	extractedText, err := serverutils.ExtractTextFromPdf(body)
+
+	// Atau langsung kirim ke AI (Gemini/OpenAI) untuk hasil yang lebih bersih:
+	// extractedText, err := s.aiService.ExtractCleanText(ctx, body, fileMeta.ContentType)
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	return extractedText, nil
+}
+
+func (s *noteService) UpdateFromExtraction(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error) {
+	// 1. Ambil data note lama
+	note, err := s.noteRepository.GetById(ctx, req.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Update konten dengan teks yang sudah di-approve/edit user
+	now := time.Now()
+	note.Content = req.Content
+	note.UpdatedAt = &now
+
+	err = s.noteRepository.Update(ctx, note)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Trigger Re-Indexing via Publisher
+	payload := dto.PublishEmbedNoteMessage{
+		NotedId: note.Id,
+	}
+	payloadJson, _ := json.Marshal(payload)
+	_ = s.publisherService.Publish(ctx, payloadJson)
+
+	return &dto.UpdateNoteResponse{Id: note.Id}, nil
 }

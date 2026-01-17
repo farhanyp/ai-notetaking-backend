@@ -7,12 +7,15 @@ import (
 )
 
 type NoteEmbedding struct {
-	Id      uuid.UUID
-	Document	string
-	EmbeddingValue	[]float32
-	NoteId uuid.UUID
-	CreateAt time.Time
-	UpdatedAt *time.Time
-	DeleteAt *time.Time
-	IsDeleted bool
+	Id             uuid.UUID
+	NoteId         uuid.UUID
+	FileId         uuid.UUID
+	ChunkContent   string
+	EmbeddingValue []float32
+	PageValue      int
+	OverlapRange   string
+	CreatedAt      time.Time
+	UpdatedAt      *time.Time
+	DeletedAt      *time.Time
+	IsDeleted      bool
 }

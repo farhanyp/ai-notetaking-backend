@@ -7,12 +7,12 @@ import (
 )
 
 type Note struct {
-	Id      uuid.UUID
-	Title	string
-	Content	string
-	Notebook_id uuid.UUID
-	CreateAt time.Time
-	UpdatedAt *time.Time
-	DeleteAt *time.Time
-	IsDeleted bool
+	Id         uuid.UUID
+	Title      string
+	Content    string
+	NotebookId uuid.UUID
+	CreatedAt  time.Time
+	UpdatedAt  *time.Time
+	DeletedAt  *time.Time
+	IsDeleted  bool
 }

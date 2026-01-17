@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  garage:
+    image: dxflrs/garage:v2.1.0
+    container_name: garage
+    restart: always
+    ports:
+      - "3900:3900"
+      - "3902:3902"
+      - "3903:3903"
+    volumes:
+      - "D:/program/docker/garage-storage/config/garage.toml:/etc/garage.toml"
+      - "D:/program/docker/garage-storage/data:/var/lib/garage/data"
+      - "D:/program/docker/garage-storage/meta:/var/lib/garage/meta"
+    networks:
+      - ai_network
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password_aman
+      POSTGRES_DB: ai_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - "D:/program/docker/postgres-data:/var/lib/postgresql/data"
+    networks:
+      - ai_network
+
+networks:
+  ai_network:
+    name: ai_network
+    driver: bridge

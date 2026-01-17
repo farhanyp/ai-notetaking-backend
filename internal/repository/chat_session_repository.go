@@ -36,9 +36,9 @@ func (n *chatbotRepository) Create(ctx context.Context, chatSession *entity.Chat
 		`INSERT INTO chat_session (id, title, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6)`,
 		chatSession.Id,
 		chatSession.Title,
-		chatSession.CreateAt,
+		chatSession.CreatedAt,
 		chatSession.UpdatedAt,
-		chatSession.DeleteAt,
+		chatSession.DeletedAt,
 		chatSession.IsDeleted,
 	)
 	if err != nil {
@@ -48,7 +48,7 @@ func (n *chatbotRepository) Create(ctx context.Context, chatSession *entity.Chat
 	return nil
 }
 
-func (n *chatbotRepository) GetAllSession(ctx context.Context) ([]*entity.ChatSession, error)  {
+func (n *chatbotRepository) GetAllSession(ctx context.Context) ([]*entity.ChatSession, error) {
 	rows, err := n.db.Query(
 		ctx,
 		`SELECT id, title, created_at, updated_at, deleted_at, is_deleted FROM chat_session WHERE is_deleted = false ORDER BY created_at DESC`,
@@ -64,9 +64,9 @@ func (n *chatbotRepository) GetAllSession(ctx context.Context) ([]*entity.ChatSe
 		err = rows.Scan(
 			&chatSession.Id,
 			&chatSession.Title,
-			&chatSession.CreateAt,
+			&chatSession.CreatedAt,
 			&chatSession.UpdatedAt,
-			&chatSession.DeleteAt,
+			&chatSession.DeletedAt,
 			&chatSession.IsDeleted,
 		)
 		if err != nil {
@@ -80,7 +80,7 @@ func (n *chatbotRepository) GetAllSession(ctx context.Context) ([]*entity.ChatSe
 	return res, err
 }
 
-func (n *chatbotRepository) GetSessionById(ctx context.Context, sessionId uuid.UUID) (*entity.ChatSession, error)  {
+func (n *chatbotRepository) GetSessionById(ctx context.Context, sessionId uuid.UUID) (*entity.ChatSession, error) {
 	rows := n.db.QueryRow(
 		ctx,
 		`SELECT id, title, created_at, updated_at, deleted_at, is_deleted FROM chat_session WHERE id = $1 AND is_deleted = false`,
@@ -91,9 +91,9 @@ func (n *chatbotRepository) GetSessionById(ctx context.Context, sessionId uuid.U
 	err := rows.Scan(
 		&chatSession.Id,
 		&chatSession.Title,
-		&chatSession.CreateAt,
+		&chatSession.CreatedAt,
 		&chatSession.UpdatedAt,
-		&chatSession.DeleteAt,
+		&chatSession.DeletedAt,
 		&chatSession.IsDeleted,
 	)
 
@@ -101,11 +101,10 @@ func (n *chatbotRepository) GetSessionById(ctx context.Context, sessionId uuid.U
 		return nil, err
 	}
 
-
 	return &chatSession, err
 }
 
-func (n *chatbotRepository) GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessage, error)  {
+func (n *chatbotRepository) GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessage, error) {
 	rows, err := n.db.Query(
 		ctx,
 		`SELECT id, role, chat, session_chat_id, created_at, updated_at, deleted_at, is_deleted FROM chat_message WHERE session_chat_id = $1 AND is_deleted = false ORDER BY created_at ASC`,
@@ -113,7 +112,7 @@ func (n *chatbotRepository) GetChatBySessionId(ctx context.Context, sessionId uu
 	)
 
 	res := make([]*entity.ChatMessage, 0)
-	
+
 	for rows.Next() {
 		var chatMessage entity.ChatMessage
 		err := rows.Scan(
@@ -121,9 +120,9 @@ func (n *chatbotRepository) GetChatBySessionId(ctx context.Context, sessionId uu
 			&chatMessage.Role,
 			&chatMessage.Chat,
 			&chatMessage.ChatSessionId,
-			&chatMessage.CreateAt,
+			&chatMessage.CreatedAt,
 			&chatMessage.UpdatedAt,
-			&chatMessage.DeleteAt,
+			&chatMessage.DeletedAt,
 			&chatMessage.IsDeleted,
 		)
 		if err != nil {

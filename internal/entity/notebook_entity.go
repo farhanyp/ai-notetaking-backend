@@ -7,11 +7,11 @@ import (
 )
 
 type Notebook struct {
-	Id      uuid.UUID
-	Name	string
-	Parent_id *uuid.UUID
-	CreateAt time.Time
+	Id        uuid.UUID
+	Name      string
+	ParentId  *uuid.UUID
+	CreatedAt time.Time
 	UpdatedAt *time.Time
-	DeleteAt *time.Time
+	DeletedAt *time.Time
 	IsDeleted bool
 }

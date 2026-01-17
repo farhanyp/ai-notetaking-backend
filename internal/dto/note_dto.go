@@ -7,9 +7,9 @@ import (
 )
 
 type CreateNoteRequest struct {
-	Title 		string 		`json:"title" validate:"required"`
-	Content 	string 		`json:"content"`
-	Notebook_id uuid.UUID 	`json:"notebook_id" validate:"required"`
+	Title      string    `json:"title" validate:"required"`
+	Content    string    `json:"content"`
+	NotebookId uuid.UUID `json:"notebook_id" validate:"required"`
 }
 
 type CreateNoteResponse struct {
@@ -17,18 +17,18 @@ type CreateNoteResponse struct {
 }
 
 type ShowNoteResponse struct {
-	Id      uuid.UUID `json:"id"`
-	Title	string `json:"title"`
-	Content string `json:"content"`
-	Notebook_id uuid.UUID `json:"notebook_id"`
-	CreateAt time.Time `json:"created_at"`
+	Id         uuid.UUID `json:"id"`
+	Title      string    `json:"title"`
+	Content    string    `json:"content"`
+	NotebookId uuid.UUID `json:"notebook_id"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type UpdateNoteRequest struct {
-	Id uuid.UUID
-	Title 		string 		`json:"title" validate:"required"`
-	Content 	string 		`json:"content"`
-	Updated_at time.Time
+	Id        uuid.UUID
+	Title     string `json:"title" validate:"required"`
+	Content   string `json:"content"`
+	UpdatedAt time.Time
 }
 
 type UpdateNoteResponse struct {
@@ -36,8 +36,8 @@ type UpdateNoteResponse struct {
 }
 
 type MoveNoteRequest struct {
-	Id uuid.UUID
-	Notebook_id *uuid.UUID `json:"notebook_id"`
+	Id         uuid.UUID
+	NotebookId *uuid.UUID `json:"notebook_id"`
 }
 
 type MoveNoteResponse struct {
@@ -45,10 +45,15 @@ type MoveNoteResponse struct {
 }
 
 type SemanticSearchResponse struct {
-	Id      uuid.UUID `json:"id"`
-	Title	string `json:"title"`
-	Content	string `json:"content"`
-	NotebookId      uuid.UUID `json:"notebook_id"`
-	CreateAt time.Time `json:"created_at"`
-	UpdateAt *time.Time `json:"updated_at"`
+	Id         uuid.UUID  `json:"id"`
+	Title      string     `json:"title"`
+	Content    string     `json:"content"`
+	NotebookId uuid.UUID  `json:"notebook_id"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdateAt   *time.Time `json:"updated_at"`
+}
+
+type ExtractPreviewResponse struct {
+	NoteId        uuid.UUID `json:"note_id"`
+	ExtractedText string    `json:"extracted_text"`
 }

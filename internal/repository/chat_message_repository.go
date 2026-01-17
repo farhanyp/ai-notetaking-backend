@@ -34,9 +34,9 @@ func (n *chatmessageRepository) Create(ctx context.Context, chatMessage *entity.
 		chatMessage.Role,
 		chatMessage.Chat,
 		chatMessage.ChatSessionId,
-		chatMessage.CreateAt,
+		chatMessage.CreatedAt,
 		chatMessage.UpdatedAt,
-		chatMessage.DeleteAt,
+		chatMessage.DeletedAt,
 		chatMessage.IsDeleted,
 	)
 	if err != nil {
