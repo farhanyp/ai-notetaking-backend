@@ -53,12 +53,13 @@ func (s *fileService) UploadFile(ctx context.Context, noteId uuid.UUID, fileName
 	mimeType, _ := s.s3Client.DetectMimeType(content)
 
 	fileEntity := &entity.File{
-		Id:          uuid.New(),
-		FileName:    safeFileName,
-		Bucket:      os.Getenv("BUCKET"),
-		ContentType: mimeType,
-		NoteId:      noteId,
-		CreatedAt:   time.Now(),
+		Id:           uuid.New(),
+		FileName:     safeFileName,
+		Bucket:       os.Getenv("BUCKET"),
+		OriginalName: fileName,
+		ContentType:  mimeType,
+		NoteId:       noteId,
+		CreatedAt:    time.Now(),
 	}
 
 	err = s.fileRepository.Create(ctx, fileEntity)

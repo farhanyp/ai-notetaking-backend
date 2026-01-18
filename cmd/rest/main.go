@@ -67,7 +67,7 @@ func main() {
 	)
 
 	exampleService := service.NewExampleService(exampleRepository, s3Client)
-	notebookService := service.NewNotebookService(notebookRepository, noteRepository, noteEmbeddingRepository, publisherService, db)
+	notebookService := service.NewNotebookService(notebookRepository, noteRepository, noteEmbeddingRepository, publisherService, fileRepository, s3Client, db)
 	noteService := service.NewNoteService(noteRepository, notebookRepository, fileRepository, s3Client, publisherService, noteEmbeddingRepository, db)
 	chatbotService := service.NewChatbotService(db, chatSessionRepository, chatMessageRepository, chatMessageRawRepository, noteEmbeddingRepository)
 	fileService := service.NewFileService(noteRepository, fileRepository, s3Client)

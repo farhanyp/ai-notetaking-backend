@@ -40,6 +40,11 @@ type ShowNotebookResponse struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
+type NoteFileDTO struct {
+	Name string `json:"original_name"`
+	Url  string `json:"url"`
+}
+
 type ListNotebookResponse struct {
 	Id        uuid.UUID  `json:"id"`
 	Name      string     `json:"name"`
@@ -51,9 +56,10 @@ type ListNotebookResponse struct {
 }
 
 type GetAllNotebookResponseNote struct {
-	Id        uuid.UUID  `json:"id"`
-	Title     string     `json:"title"`
-	Content   string     `json:"content"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdateAt  *time.Time `json:"updated_at"`
+	Id        uuid.UUID     `json:"id"`
+	Title     string        `json:"title"`
+	Content   string        `json:"content"`
+	Files     []NoteFileDTO `json:"files"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdateAt  *time.Time    `json:"updated_at"`
 }

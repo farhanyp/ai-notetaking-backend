@@ -4,8 +4,10 @@ import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
+	garagestorages3 "ai-notetaking-be/pkg/garage-storage-s3"
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +28,8 @@ type notebookService struct {
 	noteRepository          repository.INoteRepository
 	noteEmbeddingRepository repository.INoteEmbeddingRepository
 	publisherService        IPublisherService
+	fileRepository          repository.IFileRepository
+	s3Client                *garagestorages3.GarageS3
 
 	db *pgxpool.Pool
 }
@@ -35,6 +39,8 @@ func NewNotebookService(
 	noteRepository repository.INoteRepository,
 	noteEmbeddingRepository repository.INoteEmbeddingRepository,
 	publisherService IPublisherService,
+	fileRepository repository.IFileRepository,
+	s3Client *garagestorages3.GarageS3,
 	db *pgxpool.Pool) INotebookService {
 	return &notebookService{
 		notebookRepository:      notebookRepository,
@@ -42,17 +48,19 @@ func NewNotebookService(
 		noteEmbeddingRepository: noteEmbeddingRepository,
 		publisherService:        publisherService,
 		db:                      db,
+		fileRepository:          fileRepository,
+		s3Client:                s3Client,
 	}
 }
 
 func (c *notebookService) GetAll(ctx context.Context) ([]*dto.ListNotebookResponse, error) {
-
+	// 1. Ambil semua Notebooks
 	notebooks, err := c.notebookRepository.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ids := make([]uuid.UUID, 0)
+	notebookIds := make([]uuid.UUID, 0)
 	result := make([]*dto.ListNotebookResponse, 0)
 	for _, notebook := range notebooks {
 		res := dto.ListNotebookResponse{
@@ -63,30 +71,73 @@ func (c *notebookService) GetAll(ctx context.Context) ([]*dto.ListNotebookRespon
 			UpdateAt:  notebook.UpdatedAt,
 			Notes:     make([]*dto.GetAllNotebookResponseNote, 0),
 		}
-
-		result = append([]*dto.ListNotebookResponse{&res}, result...)
-		ids = append(ids, notebook.Id)
+		result = append(result, &res)
+		notebookIds = append(notebookIds, notebook.Id)
 	}
 
-	notes, err := c.noteRepository.GetByNotesIds(ctx, ids)
+	// 2. Ambil semua Notes berdasarkan Notebook IDs
+	notes, err := c.noteRepository.GetByNotesIds(ctx, notebookIds)
 	if err != nil {
 		return nil, err
 	}
 
-	for i := 0; i < len(result); i++ {
-		for j := 0; j < len(notes); j++ {
-			if notes[j].NotebookId == result[i].Id {
-				result[i].Notes = append(result[i].Notes, &dto.GetAllNotebookResponseNote{
-					Id:        notes[j].Id,
-					Title:     notes[j].Title,
-					Content:   notes[j].Content,
-					CreatedAt: notes[j].CreatedAt,
-					UpdateAt:  notes[j].UpdatedAt,
-				})
+	noteIds := make([]uuid.UUID, len(notes))
+	for i, n := range notes {
+		noteIds[i] = n.Id
+	}
+
+	// 3. Ambil semua Files dan Generate Presigned URL
+	files, err := c.fileRepository.GetByNoteIds(ctx, noteIds)
+	if err != nil {
+		// Log error dari database
+		fmt.Printf("[ERROR] Failed to fetch files from database: %v\n", err)
+	}
+
+	// Grouping files by NoteId: map[NoteId][]dto.NoteFileDTO
+	fileMap := make(map[uuid.UUID][]dto.NoteFileDTO)
+
+	if len(files) > 0 {
+		fmt.Printf("[INFO] Processing %d files to generate presigned URLs\n", len(files))
+
+		for _, f := range files {
+			// Generate Presigned URL dari GarageS3 (berlaku misal 1 jam)
+			url, err := c.s3Client.GetPresignedURL(ctx, f.Bucket, f.FileName, time.Hour*1)
+			if err != nil {
+				// Log detail file mana yang gagal di-generate URL-nya
+				fmt.Printf("[ERROR] Failed to generate presigned URL for FileID: %s (Bucket: %s, Key: %s): %v\n",
+					f.Id, f.Bucket, f.FileName, err)
+				continue
 			}
 
+			fileMap[f.NoteId] = append(fileMap[f.NoteId], dto.NoteFileDTO{
+				Name: f.OriginalName,
+				Url:  url,
+			})
 		}
+	} else {
+		fmt.Println("[DEBUG] No files found for the given notes")
+	}
 
+	// 4. Gabungkan Data (O(n))
+	for _, notebookRes := range result {
+		for _, note := range notes {
+			if note.NotebookId == notebookRes.Id {
+				// Ambil list file dari map, jika tidak ada berikan array kosong
+				attachedFiles := fileMap[note.Id]
+				if attachedFiles == nil {
+					attachedFiles = []dto.NoteFileDTO{}
+				}
+
+				notebookRes.Notes = append(notebookRes.Notes, &dto.GetAllNotebookResponseNote{
+					Id:        note.Id,
+					Title:     note.Title,
+					Content:   note.Content,
+					Files:     attachedFiles, // Masukkan array file
+					CreatedAt: note.CreatedAt,
+					UpdateAt:  note.UpdatedAt,
+				})
+			}
+		}
 	}
 
 	return result, nil

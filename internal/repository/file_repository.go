@@ -7,6 +7,7 @@ import (
 	"ai-notetaking-be/pkg/database"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ type IFileRepository interface {
 	Create(ctx context.Context, file *entity.File) error
 	GetByNoteId(ctx context.Context, noteId uuid.UUID) (*entity.File, error)
 	DeleteByNoteId(ctx context.Context, noteId uuid.UUID) error
+	GetByNoteIds(ctx context.Context, noteIds []uuid.UUID) ([]*entity.File, error)
 }
 
 type fileRepository struct {
@@ -37,10 +39,11 @@ func (r *fileRepository) UsingTx(ctx context.Context, tx database.DatabaseQuerye
 func (r *fileRepository) Create(ctx context.Context, file *entity.File) error {
 	_, err := r.db.Exec(
 		ctx,
-		`INSERT INTO file (id, file_name, bucket, content_type, note_id, created_at) 
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		`INSERT INTO file (id, file_name, original_name, bucket, content_type, note_id, created_at) 
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		file.Id,
 		file.FileName,
+		file.OriginalName,
 		file.Bucket,
 		file.ContentType,
 		file.NoteId,
@@ -53,14 +56,24 @@ func (r *fileRepository) Create(ctx context.Context, file *entity.File) error {
 func (r *fileRepository) GetByNoteId(ctx context.Context, noteId uuid.UUID) (*entity.File, error) {
 	row := r.db.QueryRow(
 		ctx,
-		`SELECT id, file_name, bucket, content_type, note_id, created_at 
-		 FROM file 
-		 WHERE note_id = $1`,
+		`SELECT id, file_name, original_name, bucket, content_type, note_id, created_at 
+         FROM file 
+         WHERE note_id = $1`,
 		noteId,
 	)
 
 	var f entity.File
-	err := row.Scan(&f.Id, &f.FileName, &f.Bucket, &f.ContentType, &f.NoteId, &f.CreatedAt)
+	// PERBAIKAN: Masukkan f.OriginalName sesuai urutan SELECT (ke-3)
+	err := row.Scan(
+		&f.Id,
+		&f.FileName,
+		&f.OriginalName, // Kolom ke-3
+		&f.Bucket,
+		&f.ContentType,
+		&f.NoteId,
+		&f.CreatedAt,
+	)
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, serverutils.ErrNotFound
@@ -79,4 +92,41 @@ func (r *fileRepository) DeleteByNoteId(ctx context.Context, noteId uuid.UUID) e
 		noteId,
 	)
 	return err
+}
+
+func (r *fileRepository) GetByNoteIds(ctx context.Context, noteIds []uuid.UUID) ([]*entity.File, error) {
+	// 1. Pastikan semua kolom yang dibutuhkan di-SELECT
+	query := `
+        SELECT id, file_name, original_name, bucket, note_id 
+        FROM file 
+        WHERE note_id = ANY($1)
+    `
+
+	rows, err := r.db.Query(ctx, query, noteIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []*entity.File
+	for rows.Next() {
+		var f entity.File
+		// 2. WAJIB: Urutan Scan harus sesuai dengan urutan SELECT di atas
+		err := rows.Scan(
+			&f.Id,           // id
+			&f.FileName,     // file_name (Ini yang jadi 'Key' di S3)
+			&f.OriginalName, // original_name
+			&f.Bucket,       // bucket
+			&f.NoteId,       // note_id
+		)
+
+		if err != nil {
+			fmt.Printf("[ERROR] Scan error in GetByNoteIds: %v\n", err)
+			return nil, err
+		}
+
+		files = append(files, &f)
+	}
+
+	return files, nil
 }
