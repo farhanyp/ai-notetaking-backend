@@ -264,6 +264,7 @@ func (c *notebookService) Delete(ctx context.Context, idParam uuid.UUID) error {
 	notebookRepo := c.notebookRepository.UsingTx(ctx, tx)
 	noteRepo := c.noteRepository.UsingTx(ctx, tx)
 	noteEmbeddingRepo := c.noteEmbeddingRepository.UsingTx(ctx, tx)
+	fileRepo := c.fileRepository.UsingTx(ctx, tx)
 
 	err = notebookRepo.DeleteById(ctx, idParam)
 	if err != nil {
@@ -281,6 +282,11 @@ func (c *notebookService) Delete(ctx context.Context, idParam uuid.UUID) error {
 	}
 
 	err = noteRepo.DeleteByNotebookId(ctx, idParam)
+	if err != nil {
+		return err
+	}
+
+	err = fileRepo.DeleteByNotebookId(ctx, idParam)
 	if err != nil {
 		return err
 	}

@@ -33,12 +33,16 @@ func (n *noteEmbeddingRepository) UsingTx(ctx context.Context, tx database.Datab
 func (n *noteEmbeddingRepository) Create(ctx context.Context, noteEmbedding *entity.NoteEmbedding) error {
 	_, err := n.db.Exec(
 		ctx,
-		`INSERT INTO note_embedding (id, document, embedding_value, note_id, created_at, updated_at, deleted_at, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO note_embedding (id, note_id, file_id, chunk_content, embedding_value, page_number, chunk_index, overlap_range, created_at, updated_at, deleted_at, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		noteEmbedding.Id,
+		noteEmbedding.NoteId,
+		noteEmbedding.FileId,
 		noteEmbedding.ChunkContent,
 		pgvector.NewVector(noteEmbedding.EmbeddingValue),
-		noteEmbedding.NoteId,
+		noteEmbedding.PageNumber,
+		noteEmbedding.ChunkIndex,
+		noteEmbedding.OverlapRange,
 		noteEmbedding.CreatedAt,
 		noteEmbedding.UpdatedAt,
 		noteEmbedding.DeletedAt,

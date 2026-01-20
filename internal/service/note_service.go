@@ -209,8 +209,8 @@ func (c *noteService) Delete(ctx context.Context, idParam uuid.UUID) error {
 	defer tx.Rollback(ctx)
 
 	noteRepository := c.noteRepository.UsingTx(ctx, tx)
-
 	noteEmbeddingRepository := c.notEmbeddingRepository.UsingTx(ctx, tx)
+	fileRepository := c.fileRepository.UsingTx(ctx, tx)
 
 	err = noteRepository.DeleteById(ctx, idParam)
 	if err != nil {
@@ -218,6 +218,11 @@ func (c *noteService) Delete(ctx context.Context, idParam uuid.UUID) error {
 	}
 
 	err = noteEmbeddingRepository.DeleteByID(ctx, idParam)
+	if err != nil {
+		return err
+	}
+
+	err = fileRepository.DeleteByNoteId(ctx, idParam)
 	if err != nil {
 		return err
 	}

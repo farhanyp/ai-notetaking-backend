@@ -4,11 +4,13 @@ import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/repository"
+	"ai-notetaking-be/pkg/chunking"
 	"ai-notetaking-be/pkg/embedding"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -16,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2/log"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tmc/langchaingo/schema"
 )
 
 type IConsumerService interface {
@@ -27,6 +30,7 @@ type consumerService struct {
 	noteRepository          repository.INoteRepository
 	noteEmbeddingRepository repository.INoteEmbeddingRepository
 	pubSub                  *gochannel.GoChannel
+	fileRepository          repository.IFileRepository
 	topicName               string
 
 	db *pgxpool.Pool
@@ -50,26 +54,37 @@ func (cs *consumerService) Consume(ctx context.Context) error {
 
 func (cs *consumerService) processMessage(ctx context.Context, msg *message.Message) error {
 	defer msg.Nack()
+
 	defer func() {
 		if e := recover(); e != nil {
-			log.Error(e)
+			log.Errorf("[Panic Recovery] Terjadi panic saat memproses embedding: %v", e)
 		}
 	}()
 
 	var payload dto.PublishEmbedNoteMessage
-	err := json.Unmarshal(msg.Payload, &payload)
-	if err != nil {
-		panic(err)
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		log.Errorf("[Consumer] Gagal unmarshal payload: %v | Payload: %s", err, string(msg.Payload))
+		return err
 	}
 
 	note, err := cs.noteRepository.GetById(ctx, payload.NotedId)
 	if err != nil {
-		panic(err)
+		log.Errorf("[Repo] Gagal ambil note (ID: %s): %v", payload.NotedId, err)
+		return err
 	}
 
 	notebook, err := cs.notebookRepository.GetById(ctx, note.NotebookId)
 	if err != nil {
-		panic(err)
+		log.Errorf("[Repo] Gagal ambil notebook (ID: %s) untuk note %s: %v", note.NotebookId, note.Id, err)
+		return err
+	}
+
+	fileMeta, err := cs.fileRepository.GetByNoteId(ctx, note.Id)
+	var fileIDPtr *uuid.UUID
+	if err != nil {
+		log.Infof("[Repo] Note %s tidak memiliki lampiran file (Opsional)", note.Id)
+	} else if fileMeta != nil {
+		fileIDPtr = &fileMeta.Id
 	}
 
 	noteUpdatedAt := "-"
@@ -78,14 +93,14 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	}
 
 	content := fmt.Sprintf(`
-	Note Title : %s
-	Notebook Title: %s
+    Note Title : %s
+    Notebook Title: %s
 
-	%s
+    %s
 
-	Created at: %s
-	Updated at: %s
-	`,
+    Created at: %s
+    Updated at: %s
+    `,
 		note.Title,
 		notebook.Name,
 		note.Content,
@@ -93,52 +108,76 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		noteUpdatedAt,
 	)
 
-	res, err := embedding.GetGeminiEmbedding(
-		os.Getenv("GOOGLE_GEMINI_API_KEY"),
-		"models/gemini-embedding-exp-03-07",
-		content,
-		"RETRIEVAL_DOCUMENT",
-	)
-	if err != nil {
-		panic(err)
-	}
+	// --- TAMBAHAN LOGIKA CHUNKING ---
+	var docs []schema.Document
+	chunkSize := 500
+	overlapPercentage := 10
 
-	noteEmbedding := entity.NoteEmbedding{
-		Id:             uuid.New(),
-		ChunkContent:   content,
-		EmbeddingValue: res.Embedding.Values,
-		NoteId:         note.Id,
-		CreatedAt:      time.Now(),
+	if len(content) > chunkSize {
+		docs, err = chunking.SplitText(ctx, strings.NewReader(content), chunkSize, overlapPercentage)
+		if err != nil {
+			log.Errorf("[Splitter] Gagal melakukan chunking: %v", err)
+			return err
+		}
+	} else {
+		docs = []schema.Document{{PageContent: content}}
 	}
+	// --------------------------------
 
 	tx, err := cs.db.Begin(ctx)
 	if err != nil {
+		log.Errorf("[DB] Gagal memulai transaksi: %v", err)
 		return err
 	}
-
 	defer tx.Rollback(ctx)
 
 	noteEmbeddingRepository := cs.noteEmbeddingRepository.UsingTx(ctx, tx)
 
-	err = noteEmbeddingRepository.DeleteByID(ctx, note.Id)
-	if err != nil {
-		panic(err)
+	if err := noteEmbeddingRepository.DeleteByID(ctx, note.Id); err != nil {
+		log.Errorf("[DB] Gagal hapus embedding lama untuk note %s: %v", note.Id, err)
+		return err
 	}
 
-	err = noteEmbeddingRepository.Create(ctx, &noteEmbedding)
-	if err != nil {
-		panic(err)
+	// --- LOOPING UNTUK SETIAP CHUNK ---
+	for i, doc := range docs {
+		log.Debugf("[AI] Mengirim chunk %d/%d ke Gemini Embedding untuk Note: %s", i+1, len(docs), note.Id)
+		res, err := embedding.GetGeminiEmbedding(
+			os.Getenv("GOOGLE_GEMINI_API_KEY"),
+			"models/gemini-embedding-exp-03-07",
+			doc.PageContent, // Menggunakan konten per chunk
+			"RETRIEVAL_DOCUMENT",
+		)
+		if err != nil {
+			log.Errorf("[AI] Gagal mendapatkan embedding dari Gemini: %v", err)
+			return err
+		}
+
+		noteEmbedding := entity.NoteEmbedding{
+			Id:             uuid.New(),
+			NoteId:         note.Id,
+			FileId:         fileIDPtr,
+			ChunkContent:   doc.PageContent, // Simpan potongan teks
+			EmbeddingValue: res.Embedding.Values,
+			PageNumber:     1,
+			ChunkIndex:     i + 1, // Index urutan chunk
+			OverlapRange:   fmt.Sprintf("%d%%", overlapPercentage),
+			CreatedAt:      time.Now(),
+		}
+
+		if err := noteEmbeddingRepository.Create(ctx, &noteEmbedding); err != nil {
+			log.Errorf("[DB] Gagal simpan embedding baru untuk note %s chunk %d: %v", note.Id, i+1, err)
+			return err
+		}
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		panic(err)
+	if err := tx.Commit(ctx); err != nil {
+		log.Errorf("[DB] Gagal commit transaksi: %v", err)
+		return err
 	}
 
+	log.Infof("[Success] Berhasil memproses %d chunk embedding untuk Note: %s", len(docs), note.Id)
 	msg.Ack()
-
 	return nil
-
 }
 
 func NewConsumerService(
@@ -147,6 +186,7 @@ func NewConsumerService(
 	noteRepository repository.INoteRepository,
 	noteEmbeddingRepository repository.INoteEmbeddingRepository,
 	notebookRepository repository.INotebookRepository,
+	fileRepository repository.IFileRepository,
 	db *pgxpool.Pool) IConsumerService {
 	return &consumerService{
 		pubSub:                  pubSub,
@@ -154,6 +194,7 @@ func NewConsumerService(
 		noteRepository:          noteRepository,
 		noteEmbeddingRepository: noteEmbeddingRepository,
 		notebookRepository:      notebookRepository,
+		fileRepository:          fileRepository,
 		db:                      db,
 	}
 }

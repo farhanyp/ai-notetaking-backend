@@ -63,6 +63,7 @@ func main() {
 		noteRepository,
 		noteEmbeddingRepository,
 		notebookRepository,
+		fileRepository,
 		db,
 	)
 

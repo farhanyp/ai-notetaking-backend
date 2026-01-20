@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +20,7 @@ type IFileRepository interface {
 	GetByNoteId(ctx context.Context, noteId uuid.UUID) (*entity.File, error)
 	DeleteByNoteId(ctx context.Context, noteId uuid.UUID) error
 	GetByNoteIds(ctx context.Context, noteIds []uuid.UUID) ([]*entity.File, error)
+	DeleteByNotebookId(ctx context.Context, notebookId uuid.UUID) error
 }
 
 type fileRepository struct {
@@ -35,7 +35,6 @@ func (r *fileRepository) UsingTx(ctx context.Context, tx database.DatabaseQuerye
 	return &fileRepository{db: tx}
 }
 
-// Create menyimpan metadata file baru
 func (r *fileRepository) Create(ctx context.Context, file *entity.File) error {
 	_, err := r.db.Exec(
 		ctx,
@@ -52,7 +51,6 @@ func (r *fileRepository) Create(ctx context.Context, file *entity.File) error {
 	return err
 }
 
-// GetByNoteId mengambil file yang menempel pada satu Note
 func (r *fileRepository) GetByNoteId(ctx context.Context, noteId uuid.UUID) (*entity.File, error) {
 	row := r.db.QueryRow(
 		ctx,
@@ -83,12 +81,10 @@ func (r *fileRepository) GetByNoteId(ctx context.Context, noteId uuid.UUID) (*en
 	return &f, nil
 }
 
-// DeleteByNoteId melakukan soft delete pada file berdasarkan note_id
 func (r *fileRepository) DeleteByNoteId(ctx context.Context, noteId uuid.UUID) error {
 	_, err := r.db.Exec(
 		ctx,
-		`UPDATE file SET is_deleted = true, deleted_at = $1 WHERE note_id = $2`,
-		time.Now(),
+		`DELETE FROM file WHERE note_id = $1`,
 		noteId,
 	)
 	return err
@@ -129,4 +125,15 @@ func (r *fileRepository) GetByNoteIds(ctx context.Context, noteIds []uuid.UUID) 
 	}
 
 	return files, nil
+}
+
+func (r *fileRepository) DeleteByNotebookId(ctx context.Context, notebookId uuid.UUID) error {
+	query := `
+        DELETE FROM file 
+        WHERE note_id IN (
+            SELECT id FROM note WHERE notebook_id = $1
+        )
+    `
+	_, err := r.db.Exec(ctx, query, notebookId)
+	return err
 }
