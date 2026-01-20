@@ -115,7 +115,7 @@ func (n *noteEmbeddingRepository) DeleteByNotebookId(ctx context.Context, notebo
 func (n *noteEmbeddingRepository) SearchSimilarity(ctx context.Context, embeddingValues []float32) ([]*entity.NoteEmbedding, error) {
 	rows, err := n.db.Query(
 		ctx,
-		`SELECT id, document from note_embedding WHERE is_deleted = false ORDER BY 1 - (embedding_value <-> $1) DESC LIMIT 5`,
+		`SELECT id, chunk_content from note_embedding WHERE is_deleted = false ORDER BY 1 - (embedding_value <-> $1) DESC LIMIT 5`,
 		pgvector.NewVector(embeddingValues),
 	)
 	if err != nil {

@@ -37,6 +37,7 @@ func (c *noteController) RegisterRoutes(r fiber.Router) {
 	h.Delete("/note/:id", c.Delete)
 	h.Put("/note/:id/move", c.Move)
 	h.Get("/note/:id/extract-preview", c.GetExtractPreview)
+	h.Get("/note/:id/extract-preview-ai", c.GetExtractPreviewAi)
 	h.Put("/note/:id/confirm-extraction", c.ConfirmExtraction)
 
 }
@@ -156,6 +157,24 @@ func (c *noteController) GetExtractPreview(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.JSON(serverutils.SuccessResponse("Success extract preview", fiber.Map{
+		"note_id":        id,
+		"extracted_text": extractedText,
+	}))
+}
+
+func (c *noteController) GetExtractPreviewAi(ctx *fiber.Ctx) error {
+	idParam := ctx.Params("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid UUID format")
+	}
+
+	extractedText, err := c.service.ExtractPreviewWithAI(ctx.Context(), id)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success extract preview ai", fiber.Map{
 		"note_id":        id,
 		"extracted_text": extractedText,
 	}))

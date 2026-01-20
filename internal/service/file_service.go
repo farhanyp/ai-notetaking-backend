@@ -64,16 +64,13 @@ func (s *fileService) UploadFile(ctx context.Context, noteId uuid.UUID, fileName
 
 	err = s.fileRepository.Create(ctx, fileEntity)
 	if err != nil {
-		// 1. Log error secara detail ke console
 		fmt.Printf("[ERROR] Database Create File: %v\n", err)
 
-		// 2. Rollback file di S3 agar tidak menumpuk sampah
 		deleteErr := s.s3Client.Delete(ctx, os.Getenv("BUCKET"), safeFileName)
 		if deleteErr != nil {
 			fmt.Printf("[CRITICAL] Gagal menghapus file yatim di S3: %v\n", deleteErr)
 		}
 
-		// 3. Kembalikan error asli agar terlihat di Response API
 		return nil, fmt.Errorf("gagal menyimpan metadata file ke database: %w", err)
 	}
 
@@ -84,20 +81,15 @@ func (s *fileService) UploadFile(ctx context.Context, noteId uuid.UUID, fileName
 }
 
 func (s *fileService) GetFileUrl(ctx context.Context, fileName string) (string, error) {
-	// 1. Check if the file name is empty before proceeding
 	if fileName == "" {
 		return "", serverutils.ErrBadRequest
 	}
 
-	// 2. Call GetPresignedURL from the library
-	// We use a fixed bucket "test-folder" as per your setup
 	url, err := s.s3Client.GetPresignedURL(ctx, os.Getenv("BUCKET"), fileName, 15*time.Minute)
 
 	if err != nil {
-		// LOG the technical details (e.g., S3 connection timeout, signature error)
 		log.Printf("[S3 Service] Failed to generate Presigned URL for %s: %v", fileName, err)
 
-		// RETURN a safe error to the client
 		return "", serverutils.ErrInternal
 	}
 

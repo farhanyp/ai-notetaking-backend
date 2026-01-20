@@ -108,7 +108,6 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		noteUpdatedAt,
 	)
 
-	// --- TAMBAHAN LOGIKA CHUNKING ---
 	var docs []schema.Document
 	chunkSize := 500
 	overlapPercentage := 10
@@ -122,7 +121,6 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	} else {
 		docs = []schema.Document{{PageContent: content}}
 	}
-	// --------------------------------
 
 	tx, err := cs.db.Begin(ctx)
 	if err != nil {
@@ -138,13 +136,12 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		return err
 	}
 
-	// --- LOOPING UNTUK SETIAP CHUNK ---
 	for i, doc := range docs {
 		log.Debugf("[AI] Mengirim chunk %d/%d ke Gemini Embedding untuk Note: %s", i+1, len(docs), note.Id)
 		res, err := embedding.GetGeminiEmbedding(
 			os.Getenv("GOOGLE_GEMINI_API_KEY"),
 			"models/gemini-embedding-exp-03-07",
-			doc.PageContent, // Menggunakan konten per chunk
+			doc.PageContent,
 			"RETRIEVAL_DOCUMENT",
 		)
 		if err != nil {
@@ -156,10 +153,10 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 			Id:             uuid.New(),
 			NoteId:         note.Id,
 			FileId:         fileIDPtr,
-			ChunkContent:   doc.PageContent, // Simpan potongan teks
+			ChunkContent:   doc.PageContent,
 			EmbeddingValue: res.Embedding.Values,
-			PageNumber:     1,
-			ChunkIndex:     i + 1, // Index urutan chunk
+			PageNumber:     1, // Belum ada logika untuk melakukan page number
+			ChunkIndex:     i + 1,
 			OverlapRange:   fmt.Sprintf("%d%%", overlapPercentage),
 			CreatedAt:      time.Now(),
 		}

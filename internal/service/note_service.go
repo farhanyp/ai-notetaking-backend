@@ -5,11 +5,13 @@ import (
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/pkg/serverutils"
 	"ai-notetaking-be/internal/repository"
+	"ai-notetaking-be/pkg/chatbot"
 	"ai-notetaking-be/pkg/embedding"
 	garagestorages3 "ai-notetaking-be/pkg/garage-storage-s3"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -25,6 +27,7 @@ type INoteService interface {
 	Delete(ctx context.Context, idParam uuid.UUID) error
 	Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.MoveNoteResponse, error)
 	ExtractPreview(ctx context.Context, noteId uuid.UUID) (string, error)
+	ExtractPreviewWithAI(ctx context.Context, noteId uuid.UUID) (string, error)
 	UpdateFromExtraction(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error)
 }
 
@@ -278,24 +281,21 @@ func (c *noteService) Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.
 }
 
 func (s *noteService) ExtractPreview(ctx context.Context, noteId uuid.UUID) (string, error) {
-	// 1. Cek Note di Database
 	note, err := s.noteRepository.GetById(ctx, noteId)
 	if err != nil {
-		return "", err // Mengembalikan serverutils.ErrNotFound jika tidak ada
+		return "", err
 	}
 
-	// 2. Ambil Metadata File (Asumsi Anda punya FileRepository)
 	fileMeta, err := s.fileRepository.GetByNoteId(ctx, note.Id)
 	if err != nil {
 		return "", fmt.Errorf("no file associated with this note: %w", err)
 	}
 
-	// 3. Download file dari Garage S3
 	body, err := s.s3Client.Download(ctx, fileMeta.Bucket, fileMeta.FileName)
 	if err != nil {
 		return "", err
 	}
-	defer body.Close() // Sangat penting!
+	defer body.Close()
 
 	// 4. Proses Ekstraksi (Pilih salah satu metode)
 
@@ -309,6 +309,60 @@ func (s *noteService) ExtractPreview(ctx context.Context, noteId uuid.UUID) (str
 	// }
 
 	return extractedText, nil
+}
+
+func (s *noteService) ExtractPreviewWithAI(ctx context.Context, noteId uuid.UUID) (string, error) {
+	note, err := s.noteRepository.GetById(ctx, noteId)
+	if err != nil {
+		return "", err
+	}
+
+	fileMeta, err := s.fileRepository.GetByNoteId(ctx, note.Id)
+	if err != nil {
+		return "", fmt.Errorf("no file associated with this note: %w", err)
+	}
+
+	body, err := s.s3Client.Download(ctx, fileMeta.Bucket, fileMeta.FileName)
+	if err != nil {
+		return "", err
+	}
+	defer body.Close()
+
+	extractedText, err := serverutils.ExtractTextFromPdf(body)
+
+	content := fmt.Sprintf(
+		`[SYSTEM INSTRUCTION: STRICT RAW OUTPUT ONLY]
+    Refactor the text below into Markdown for <MarkdownReact>.
+    
+    RULES:
+    1. Output MUST be RAW MARKDOWN text only.
+    2. DO NOT use code blocks or backticks like %s at the beginning or end.
+    3. DO NOT include any conversational text (no "Here is...", no "Closing...").
+    4. Start immediately with the first header or content.
+    
+    TEXT:
+    %s`,
+		"```markdown",
+		extractedText,
+	)
+
+	geminiReq := make([]*chatbot.ChatHistory, 0)
+	geminiReq = append(geminiReq, &chatbot.ChatHistory{
+		Role: "user",
+		Chat: content,
+	})
+
+	reply, err := chatbot.GetGeminiResponse(
+		ctx,
+		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		geminiReq,
+	)
+	if err != nil {
+		log.Printf("[ExtractPreviewWithAI] Gemini API error for note %s: %v", note.Id, err)
+		return "", err
+	}
+
+	return reply, nil
 }
 
 func (s *noteService) UpdateFromExtraction(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error) {

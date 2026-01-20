@@ -29,7 +29,7 @@ func (n *chatmessageRepository) UsingTx(ctx context.Context, tx database.Databas
 func (n *chatmessageRepository) Create(ctx context.Context, chatMessage *entity.ChatMessage) error {
 	_, err := n.db.Exec(
 		ctx,
-		`INSERT INTO chat_message (id, role, chat, session_chat_id, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO chat_message (id, role, chat, chat_session_id, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		chatMessage.Id,
 		chatMessage.Role,
 		chatMessage.Chat,
@@ -49,7 +49,7 @@ func (n *chatmessageRepository) Create(ctx context.Context, chatMessage *entity.
 func (n *chatmessageRepository) DeleteBySessionId(ctx context.Context, chatSessionId uuid.UUID) error {
 	_, err := n.db.Exec(
 		ctx,
-		`UPDATE chat_message SET deleted_at = $1, is_deleted = true WHERE session_chat_id = $2`,
+		`UPDATE chat_message SET deleted_at = $1, is_deleted = true WHERE chat_session_id = $2`,
 		time.Now(),
 		chatSessionId,
 	)

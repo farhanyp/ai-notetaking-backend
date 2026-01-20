@@ -30,7 +30,7 @@ func (n *chatmessagerawRepository) UsingTx(ctx context.Context, tx database.Data
 func (n *chatmessagerawRepository) Create(ctx context.Context, chatMessageRaw *entity.ChatMessageRaw) error {
 	_, err := n.db.Exec(
 		ctx,
-		`INSERT INTO chat_message_raw (id, role, chat, session_chat_id, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO chat_message_raw (id, role, chat, chat_session_id, created_at, updated_at, deleted_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		chatMessageRaw.Id,
 		chatMessageRaw.Role,
 		chatMessageRaw.Chat,
@@ -50,7 +50,7 @@ func (n *chatmessagerawRepository) Create(ctx context.Context, chatMessageRaw *e
 func (n *chatmessagerawRepository) GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessageRaw, error) {
 	rows, err := n.db.Query(
 		ctx,
-		`SELECT id, role, chat, session_chat_id, created_at, updated_at, deleted_at, is_deleted FROM chat_message_raw WHERE session_chat_id = $1 AND is_deleted = false ORDER BY created_at ASC`,
+		`SELECT id, role, chat, chat_session_id, created_at, updated_at, deleted_at, is_deleted FROM chat_message_raw WHERE chat_session_id = $1 AND is_deleted = false ORDER BY created_at ASC`,
 		sessionId,
 	)
 
@@ -82,7 +82,7 @@ func (n *chatmessagerawRepository) GetChatBySessionId(ctx context.Context, sessi
 func (n *chatmessagerawRepository) DeleteBySessionId(ctx context.Context, chatSessionId uuid.UUID) error {
 	_, err := n.db.Exec(
 		ctx,
-		`UPDATE chat_message_raw SET deleted_at = $1, is_deleted = true WHERE session_chat_id = $2`,
+		`UPDATE chat_message_raw SET deleted_at = $1, is_deleted = true WHERE chat_session_id = $2`,
 		time.Now(),
 		chatSessionId,
 	)

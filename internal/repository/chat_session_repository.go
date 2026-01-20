@@ -107,7 +107,7 @@ func (n *chatbotRepository) GetSessionById(ctx context.Context, sessionId uuid.U
 func (n *chatbotRepository) GetChatBySessionId(ctx context.Context, sessionId uuid.UUID) ([]*entity.ChatMessage, error) {
 	rows, err := n.db.Query(
 		ctx,
-		`SELECT id, role, chat, session_chat_id, created_at, updated_at, deleted_at, is_deleted FROM chat_message WHERE session_chat_id = $1 AND is_deleted = false ORDER BY created_at ASC`,
+		`SELECT id, role, chat, chat_session_id, created_at, updated_at, deleted_at, is_deleted FROM chat_message WHERE chat_session_id = $1 AND is_deleted = false ORDER BY created_at ASC`,
 		sessionId,
 	)
 
