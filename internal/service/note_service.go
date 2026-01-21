@@ -1,6 +1,7 @@
 package service
 
 import (
+	"ai-notetaking-be/internal/constant"
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
 	"ai-notetaking-be/internal/pkg/serverutils"
@@ -348,8 +349,35 @@ func (s *noteService) ExtractPreviewWithAI(ctx context.Context, noteId uuid.UUID
 
 	geminiReq := make([]*chatbot.ChatHistory, 0)
 	geminiReq = append(geminiReq, &chatbot.ChatHistory{
+		Role: constant.ChatMessageRoleModel,
+		Chat: "As an expert in markdown formatting for ReactMarkdown, your task is to transform an extracted text into a well-formatted markdown document for ReactMarkdown.",
+	})
+
+	geminiReq = append(geminiReq, &chatbot.ChatHistory{
 		Role: "user",
-		Chat: content,
+		Chat: fmt.Sprintf(`
+		Instructions:
+		1  -  Input:
+		You will receive plain text extracted from function ExtractTextFromPdf use library github.com/ledongthuc/pdf.
+
+		2  -  Output:
+		Provide the same text but formatted in markdown react, don't change anything, don't add uppercase, don't add new line, the output should be Mardown with the same input text as it is.
+
+		3  -  Formatting Requirements:
+		*Headers: Identify and convert headings to markdown headers (e.g., # Header 1, ## Header 2, etc.).
+		*Lists: Detect and format lists (both ordered and unordered).
+		*Emphasis: Apply appropriate emphasis using *italic*, **bold**, or ***bold italic*** where needed.
+		*Links: Convert URLs into markdown link format [link text](URL).
+		*Code Blocks: Format any code snippets as inline code or code blocks.
+		*Blockquotes: Apply blockquote formatting to any quoted text.
+		*Tables: Convert any tabular data into markdown tables.
+
+		---
+		INPUT TEXT: %s
+
+		OUTPUT ONLY THE MARKDOWN TEXT, DON'T OUTPUT ANYTHING ELSE.
+
+		NOW CONVERT TEXT.`, content),
 	})
 
 	reply, err := chatbot.GetGeminiResponse(
