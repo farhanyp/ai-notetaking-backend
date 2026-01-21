@@ -95,6 +95,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	content := fmt.Sprintf(`
     Note Title : %s
     Notebook Title: %s
+	File referensi: %s
 
     %s
 
@@ -103,6 +104,7 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
     `,
 		note.Title,
 		notebook.Name,
+		fileMeta.OriginalName,
 		note.Content,
 		note.CreatedAt.Format(time.RFC3339),
 		noteUpdatedAt,
