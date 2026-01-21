@@ -3,62 +3,61 @@ package serverutils
 import (
 	"bytes"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/ledongthuc/pdf"
 )
 
-func ExtractTextFromPdf(reader io.Reader) (string, error) {
+type PdfPage struct {
+	PageNumber int
+	Content    string
+}
+
+func ExtractTextPerPage(reader io.Reader) ([]PdfPage, error) {
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	readerAt := bytes.NewReader(data)
 	content, err := pdf.NewReader(readerAt, int64(len(data)))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	styledTexts, err := content.GetStyledTexts()
-	if err != nil {
-		return "", err
-	}
+	var pages []PdfPage
 
-	rows := make(map[int][]pdf.Text)
-	var yCoords []int
-
-	for _, st := range styledTexts {
-		yKey := int(st.Y)
-		if _, ok := rows[yKey]; !ok {
-			yCoords = append(yCoords, yKey)
-		}
-		rows[yKey] = append(rows[yKey], st)
-	}
-
-	sort.Slice(yCoords, func(i, j int) bool {
-		return yCoords[i] > yCoords[j]
-	})
-
-	var buf bytes.Buffer
-	for _, y := range yCoords {
-		rowTexts := rows[y]
-
-		sort.Slice(rowTexts, func(i, j int) bool {
-			return rowTexts[i].X < rowTexts[j].X
-		})
-
-		var lineContent strings.Builder
-		for _, st := range rowTexts {
-			lineContent.WriteString(st.S + " ")
+	for pageIndex := 1; pageIndex <= content.NumPage(); pageIndex++ {
+		page := content.Page(pageIndex)
+		if page.V.IsNull() {
+			continue
 		}
 
-		finalLine := strings.TrimSpace(lineContent.String())
-		if finalLine != "" {
-			buf.WriteString(finalLine + "\n")
+		text, err := page.GetPlainText(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		clean := strings.TrimSpace(text)
+		if clean != "" {
+			pages = append(pages, PdfPage{
+				PageNumber: pageIndex,
+				Content:    clean,
+			})
 		}
 	}
 
-	return buf.String(), nil
+	return pages, nil
+}
+
+func NormalizePreview(text string) string {
+	text = strings.TrimSpace(text)
+	text = strings.ReplaceAll(text, "\n\n\n", "\n\n")
+
+	const maxLen = 800
+	if len(text) <= maxLen {
+		return text
+	}
+
+	return text[:maxLen] + "..."
 }

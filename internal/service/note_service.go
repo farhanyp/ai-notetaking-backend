@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -281,15 +282,28 @@ func (c *noteService) Move(ctx context.Context, req *dto.MoveNoteRequest) (*dto.
 	}, nil
 }
 
-func (s *noteService) ExtractPreview(ctx context.Context, noteId uuid.UUID) (string, error) {
+func (s *noteService) ExtractPreview(
+	ctx context.Context,
+	noteId uuid.UUID,
+) (string, error) {
+
 	note, err := s.noteRepository.GetById(ctx, noteId)
 	if err != nil {
 		return "", err
 	}
 
+	var preview strings.Builder
+
+	// 1️⃣ Masukkan isi note dulu (kalau ada)
+	if strings.TrimSpace(note.Content) != "" {
+		preview.WriteString(note.Content)
+		preview.WriteString("\n\n")
+	}
+
+	// 2️⃣ Ambil file (opsional)
 	fileMeta, err := s.fileRepository.GetByNoteId(ctx, note.Id)
-	if err != nil {
-		return "", fmt.Errorf("no file associated with this note: %w", err)
+	if err != nil || fileMeta == nil {
+		return serverutils.NormalizePreview(preview.String()), nil
 	}
 
 	body, err := s.s3Client.Download(ctx, fileMeta.Bucket, fileMeta.FileName)
@@ -298,29 +312,44 @@ func (s *noteService) ExtractPreview(ctx context.Context, noteId uuid.UUID) (str
 	}
 	defer body.Close()
 
-	// 4. Proses Ekstraksi (Pilih salah satu metode)
+	// 3️⃣ Extract PDF per halaman
+	pages, err := serverutils.ExtractTextPerPage(body)
+	if err != nil {
+		return "", err
+	}
 
-	// Contoh jika menggunakan LangChainGo atau library PDF langsung:
-	extractedText, err := serverutils.ExtractTextFromPdf(body)
+	// 4️⃣ Gabungkan beberapa halaman awal saja
+	const maxPages = 2
+	for i, page := range pages {
+		if i >= maxPages {
+			break
+		}
 
-	// Atau langsung kirim ke AI (Gemini/OpenAI) untuk hasil yang lebih bersih:
-	// extractedText, err := s.aiService.ExtractCleanText(ctx, body, fileMeta.ContentType)
-	// if err != nil {
-	// 	return "", err
-	// }
+		if strings.TrimSpace(page.Content) == "" {
+			continue
+		}
 
-	return extractedText, nil
+		preview.WriteString(page.Content)
+		preview.WriteString("\n\n")
+	}
+
+	// 5️⃣ FINAL → STRING
+	return serverutils.NormalizePreview(preview.String()), nil
 }
 
-func (s *noteService) ExtractPreviewWithAI(ctx context.Context, noteId uuid.UUID) (string, error) {
+func (s *noteService) ExtractPreviewWithAI(
+	ctx context.Context,
+	noteId uuid.UUID,
+) (string, error) {
+
 	note, err := s.noteRepository.GetById(ctx, noteId)
 	if err != nil {
 		return "", err
 	}
 
 	fileMeta, err := s.fileRepository.GetByNoteId(ctx, note.Id)
-	if err != nil {
-		return "", fmt.Errorf("no file associated with this note: %w", err)
+	if err != nil || fileMeta == nil {
+		return "", fmt.Errorf("no file associated with this note")
 	}
 
 	body, err := s.s3Client.Download(ctx, fileMeta.Bucket, fileMeta.FileName)
@@ -329,56 +358,61 @@ func (s *noteService) ExtractPreviewWithAI(ctx context.Context, noteId uuid.UUID
 	}
 	defer body.Close()
 
-	extractedText, err := serverutils.ExtractTextFromPdf(body)
+	// 1️⃣ Extract per halaman
+	pages, err := serverutils.ExtractTextPerPage(body)
+	if err != nil {
+		return "", err
+	}
 
+	// 2️⃣ Gabungkan halaman → string
+	var rawText strings.Builder
+
+	const maxPages = 3 // ⬅️ penting biar token aman
+	for i, page := range pages {
+		if i >= maxPages {
+			break
+		}
+
+		if strings.TrimSpace(page.Content) == "" {
+			continue
+		}
+
+		rawText.WriteString(page.Content)
+		rawText.WriteString("\n\n")
+	}
+
+	if rawText.Len() == 0 {
+		return "", fmt.Errorf("extracted pdf text is empty")
+	}
+
+	// 3️⃣ Prompt STRICT
 	content := fmt.Sprintf(
 		`[SYSTEM INSTRUCTION: STRICT RAW OUTPUT ONLY]
-    Refactor the text below into Markdown for <MarkdownReact>.
-    
-    RULES:
-    1. Output MUST be RAW MARKDOWN text only.
-    2. DO NOT use code blocks or backticks like %s at the beginning or end.
-    3. DO NOT include any conversational text (no "Here is...", no "Closing...").
-    4. Start immediately with the first header or content.
-    
-    TEXT:
-    %s`,
+		Refactor the text below into Markdown for <MarkdownReact>.
+
+	RULES:
+	1. Output MUST be RAW MARKDOWN text only.
+	2. DO NOT use code blocks or backticks like %s at the beginning or end.
+	3. DO NOT include any conversational text.
+	4. Start immediately with the first header or content.
+
+	TEXT:
+	%s`,
 		"```markdown",
-		extractedText,
+		rawText.String(),
 	)
 
-	geminiReq := make([]*chatbot.ChatHistory, 0)
-	geminiReq = append(geminiReq, &chatbot.ChatHistory{
-		Role: constant.ChatMessageRoleModel,
-		Chat: "As an expert in markdown formatting for ReactMarkdown, your task is to transform an extracted text into a well-formatted markdown document for ReactMarkdown.",
-	})
-
-	geminiReq = append(geminiReq, &chatbot.ChatHistory{
-		Role: "user",
-		Chat: fmt.Sprintf(`
-		Instructions:
-		1  -  Input:
-		You will receive plain text extracted from function ExtractTextFromPdf use library github.com/ledongthuc/pdf.
-
-		2  -  Output:
-		Provide the same text but formatted in markdown react, don't change anything, don't add uppercase, don't add new line, the output should be Mardown with the same input text as it is.
-
-		3  -  Formatting Requirements:
-		*Headers: Identify and convert headings to markdown headers (e.g., # Header 1, ## Header 2, etc.).
-		*Lists: Detect and format lists (both ordered and unordered).
-		*Emphasis: Apply appropriate emphasis using *italic*, **bold**, or ***bold italic*** where needed.
-		*Links: Convert URLs into markdown link format [link text](URL).
-		*Code Blocks: Format any code snippets as inline code or code blocks.
-		*Blockquotes: Apply blockquote formatting to any quoted text.
-		*Tables: Convert any tabular data into markdown tables.
-
-		---
-		INPUT TEXT: %s
-
-		OUTPUT ONLY THE MARKDOWN TEXT, DON'T OUTPUT ANYTHING ELSE.
-
-		NOW CONVERT TEXT.`, content),
-	})
+	// 4️⃣ Gemini request
+	geminiReq := []*chatbot.ChatHistory{
+		{
+			Role: constant.ChatMessageRoleModel,
+			Chat: "You are an expert in formatting raw extracted PDF text into clean ReactMarkdown-compatible markdown.",
+		},
+		{
+			Role: "user",
+			Chat: content,
+		},
+	}
 
 	reply, err := chatbot.GetGeminiResponse(
 		ctx,
@@ -386,11 +420,12 @@ func (s *noteService) ExtractPreviewWithAI(ctx context.Context, noteId uuid.UUID
 		geminiReq,
 	)
 	if err != nil {
-		log.Printf("[ExtractPreviewWithAI] Gemini API error for note %s: %v", note.Id, err)
+		log.Printf("[ExtractPreviewWithAI] Gemini error for note %s: %v", note.Id, err)
 		return "", err
 	}
 
-	return reply, nil
+	// 5️⃣ FINAL → string (siap update note)
+	return serverutils.NormalizePreview(reply), nil
 }
 
 func (s *noteService) UpdateFromExtraction(ctx context.Context, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error) {

@@ -3,14 +3,15 @@ package service
 import (
 	"ai-notetaking-be/internal/dto"
 	"ai-notetaking-be/internal/entity"
+	"ai-notetaking-be/internal/pkg/serverutils"
 	"ai-notetaking-be/internal/repository"
 	"ai-notetaking-be/pkg/chunking"
 	"ai-notetaking-be/pkg/embedding"
+	garagestorages3 "ai-notetaking-be/pkg/garage-storage-s3"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -31,6 +32,7 @@ type consumerService struct {
 	noteEmbeddingRepository repository.INoteEmbeddingRepository
 	pubSub                  *gochannel.GoChannel
 	fileRepository          repository.IFileRepository
+	s3Client                *garagestorages3.GarageS3
 	topicName               string
 
 	db *pgxpool.Pool
@@ -61,12 +63,18 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		}
 	}()
 
+	// =========================
+	// Parse Payload
+	// =========================
 	var payload dto.PublishEmbedNoteMessage
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		log.Errorf("[Consumer] Gagal unmarshal payload: %v | Payload: %s", err, string(msg.Payload))
 		return err
 	}
 
+	// =========================
+	// Ambil Note & Notebook
+	// =========================
 	note, err := cs.noteRepository.GetById(ctx, payload.NotedId)
 	if err != nil {
 		log.Errorf("[Repo] Gagal ambil note (ID: %s): %v", payload.NotedId, err)
@@ -79,51 +87,96 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 		return err
 	}
 
+	// =========================
+	// File Metadata (Opsional)
+	// =========================
+	var (
+		fileIDPtr    *uuid.UUID
+		originalName string
+	)
+
 	fileMeta, err := cs.fileRepository.GetByNoteId(ctx, note.Id)
-	var fileIDPtr *uuid.UUID
 	if err != nil {
-		log.Infof("[Repo] Note %s tidak memiliki lampiran file (Opsional)", note.Id)
+		log.Infof("[Repo] Note %s tidak memiliki lampiran file (opsional)", note.Id)
 	} else if fileMeta != nil {
 		fileIDPtr = &fileMeta.Id
+		originalName = fileMeta.OriginalName
 	}
 
+	// =========================
+	// Prepare Note Content (Page 0)
+	// =========================
 	noteUpdatedAt := "-"
 	if note.UpdatedAt != nil {
 		noteUpdatedAt = note.UpdatedAt.Format(time.RFC3339)
 	}
 
-	content := fmt.Sprintf(`
-    Note Title : %s
-    Notebook Title: %s
-	File referensi: %s
+	noteContent := fmt.Sprintf(`
+Note Title      : %s
+Notebook Title  : %s
+File Referensi  : %s
 
-    %s
+%s
 
-    Created at: %s
-    Updated at: %s
-    `,
+Created At      : %s
+Updated At      : %s
+`,
 		note.Title,
 		notebook.Name,
-		fileMeta.OriginalName,
+		originalName,
 		note.Content,
 		note.CreatedAt.Format(time.RFC3339),
 		noteUpdatedAt,
 	)
 
+	// =========================
+	// Chunking (HANYA via ChunkPdfPage)
+	// =========================
+	const maxChunkSize = 800
 	var docs []schema.Document
-	chunkSize := 500
-	overlapPercentage := 10
 
-	if len(content) > chunkSize {
-		docs, err = chunking.SplitText(ctx, strings.NewReader(content), chunkSize, overlapPercentage)
+	// NOTE → Page 0
+	docs = append(docs,
+		chunking.ChunkPdfPage(
+			chunking.PdfPage{
+				PageNumber: 0,
+				Content:    noteContent,
+			},
+			maxChunkSize,
+		)...,
+	)
+
+	// PDF → Per Page
+	if fileMeta != nil {
+		body, err := cs.s3Client.Download(ctx, fileMeta.Bucket, fileMeta.FileName)
 		if err != nil {
-			log.Errorf("[Splitter] Gagal melakukan chunking: %v", err)
+			log.Errorf("[Storage] Download gagal: %v", err)
 			return err
 		}
-	} else {
-		docs = []schema.Document{{PageContent: content}}
+		defer body.Close()
+
+		pages, err := serverutils.ExtractTextPerPage(body)
+		if err != nil {
+			log.Errorf("[PDF] Extract text gagal: %v", err)
+			return err
+		}
+
+		for _, page := range pages {
+			docs = append(docs,
+				chunking.ChunkPdfPage(
+					chunking.PdfPage{
+						PageNumber: page.PageNumber,
+						Content:    page.Content,
+					},
+					maxChunkSize,
+				)...,
+			)
+		}
 	}
 
+	// =========================
+	// DB Transaction
+	// =========================
 	tx, err := cs.db.Begin(ctx)
 	if err != nil {
 		log.Errorf("[DB] Gagal memulai transaksi: %v", err)
@@ -131,15 +184,30 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 	}
 	defer tx.Rollback(ctx)
 
-	noteEmbeddingRepository := cs.noteEmbeddingRepository.UsingTx(ctx, tx)
+	repo := cs.noteEmbeddingRepository.UsingTx(ctx, tx)
 
-	if err := noteEmbeddingRepository.DeleteByID(ctx, note.Id); err != nil {
+	if err := repo.DeleteByID(ctx, note.Id); err != nil {
 		log.Errorf("[DB] Gagal hapus embedding lama untuk note %s: %v", note.Id, err)
 		return err
 	}
 
+	// =========================
+	// Embedding Loop
+	// =========================
 	for i, doc := range docs {
-		log.Debugf("[AI] Mengirim chunk %d/%d ke Gemini Embedding untuk Note: %s", i+1, len(docs), note.Id)
+		pageNumber := 0
+		if v, ok := doc.Metadata["page"].(int); ok {
+			pageNumber = v
+		}
+
+		log.Debugf(
+			"[AI] Mengirim chunk %d/%d | Note:%s | Page:%d",
+			i+1,
+			len(docs),
+			note.Id,
+			pageNumber,
+		)
+
 		res, err := embedding.GetGeminiEmbedding(
 			os.Getenv("GOOGLE_GEMINI_API_KEY"),
 			"models/gemini-embedding-exp-03-07",
@@ -151,30 +219,41 @@ func (cs *consumerService) processMessage(ctx context.Context, msg *message.Mess
 			return err
 		}
 
-		noteEmbedding := entity.NoteEmbedding{
+		if err := repo.Create(ctx, &entity.NoteEmbedding{
 			Id:             uuid.New(),
 			NoteId:         note.Id,
 			FileId:         fileIDPtr,
 			ChunkContent:   doc.PageContent,
 			EmbeddingValue: res.Embedding.Values,
-			PageNumber:     1, // Belum ada logika untuk melakukan page number
+			PageNumber:     pageNumber,
 			ChunkIndex:     i + 1,
-			OverlapRange:   fmt.Sprintf("%d%%", overlapPercentage),
+			OverlapRange:   "none",
 			CreatedAt:      time.Now(),
-		}
-
-		if err := noteEmbeddingRepository.Create(ctx, &noteEmbedding); err != nil {
-			log.Errorf("[DB] Gagal simpan embedding baru untuk note %s chunk %d: %v", note.Id, i+1, err)
+		}); err != nil {
+			log.Errorf(
+				"[DB] Gagal simpan embedding Note %s | Chunk %d: %v",
+				note.Id,
+				i+1,
+				err,
+			)
 			return err
 		}
 	}
 
+	// =========================
+	// Commit
+	// =========================
 	if err := tx.Commit(ctx); err != nil {
 		log.Errorf("[DB] Gagal commit transaksi: %v", err)
 		return err
 	}
 
-	log.Infof("[Success] Berhasil memproses %d chunk embedding untuk Note: %s", len(docs), note.Id)
+	log.Infof(
+		"[Success] Berhasil memproses %d chunk embedding untuk Note: %s",
+		len(docs),
+		note.Id,
+	)
+
 	msg.Ack()
 	return nil
 }
@@ -186,6 +265,7 @@ func NewConsumerService(
 	noteEmbeddingRepository repository.INoteEmbeddingRepository,
 	notebookRepository repository.INotebookRepository,
 	fileRepository repository.IFileRepository,
+	s3Client *garagestorages3.GarageS3,
 	db *pgxpool.Pool) IConsumerService {
 	return &consumerService{
 		pubSub:                  pubSub,
@@ -194,6 +274,7 @@ func NewConsumerService(
 		noteEmbeddingRepository: noteEmbeddingRepository,
 		notebookRepository:      notebookRepository,
 		fileRepository:          fileRepository,
+		s3Client:                s3Client,
 		db:                      db,
 	}
 }

@@ -64,6 +64,7 @@ func main() {
 		noteEmbeddingRepository,
 		notebookRepository,
 		fileRepository,
+		s3Client,
 		db,
 	)
 
