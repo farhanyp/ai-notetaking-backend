@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -200,25 +201,44 @@ Updated At      : %s
 			pageNumber = v
 		}
 
+		// 1. Ambil sedikit potongan teks untuk inspeksi di log
+		preview := doc.PageContent
+		if len(preview) > 50 {
+			preview = preview[:50] + "..."
+		}
+
+		// 2. Log dengan %q untuk melihat karakter tersembunyi (\n, \t, dll)
 		log.Debugf(
-			"[AI] Mengirim chunk %d/%d | Note:%s | Page:%d",
+			"[AI-Inspect] Chunk %d/%d | Note:%s | Page:%d | Content: %q | Len: %d",
 			i+1,
 			len(docs),
 			note.Id,
 			pageNumber,
+			preview,
+			len(doc.PageContent),
 		)
 
+		// 3. Validasi: Jika teks kosong atau hanya whitespace, jangan kirim ke Gemini
+		cleanContent := strings.TrimSpace(doc.PageContent)
+		if cleanContent == "" {
+			log.Warnf("[AI-Skip] Chunk %d dilewati karena tidak ada teks (kosong/whitespace)", i+1)
+			continue
+		}
+
+		// 4. Panggil Gemini Embedding
 		res, err := embedding.GetGeminiEmbedding(
 			os.Getenv("GOOGLE_GEMINI_API_KEY"),
 			"models/gemini-embedding-exp-03-07",
-			doc.PageContent,
+			cleanContent, // Gunakan teks yang sudah dibersihkan
 			"RETRIEVAL_DOCUMENT",
 		)
 		if err != nil {
-			log.Errorf("[AI] Gagal mendapatkan embedding dari Gemini: %v", err)
+			// Jika error, log konten aslinya agar tahu apa yang membuat Gemini menolak
+			log.Errorf("[AI] Gagal mendapatkan embedding Chunk %d: %v | Content: %q", i+1, err, doc.PageContent)
 			return err
 		}
 
+		// 5. Simpan ke Repository
 		if err := repo.Create(ctx, &entity.NoteEmbedding{
 			Id:             uuid.New(),
 			NoteId:         note.Id,

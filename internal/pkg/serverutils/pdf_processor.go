@@ -49,15 +49,3 @@ func ExtractTextPerPage(reader io.Reader) ([]PdfPage, error) {
 
 	return pages, nil
 }
-
-func NormalizePreview(text string) string {
-	text = strings.TrimSpace(text)
-	text = strings.ReplaceAll(text, "\n\n\n", "\n\n")
-
-	const maxLen = 800
-	if len(text) <= maxLen {
-		return text
-	}
-
-	return text[:maxLen] + "..."
-}
