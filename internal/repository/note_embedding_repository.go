@@ -113,21 +113,36 @@ func (n *noteEmbeddingRepository) DeleteByNotebookId(ctx context.Context, notebo
 }
 
 func (n *noteEmbeddingRepository) SearchSimilarity(ctx context.Context, embeddingValues []float32) ([]*entity.NoteEmbedding, error) {
-	rows, err := n.db.Query(
-		ctx,
-		`SELECT DISTINCT ON (note_id) id, note_id, chunk_content, 1 - (embedding_value <-> $1) AS similarity FROM note_embedding WHERE is_deleted = false ORDER BY note_id, similarity DESC LIMIT 5`,
-		pgvector.NewVector(embeddingValues),
-	)
+	query := `
+        SELECT DISTINCT ON (note_id) 
+            id, note_id, chunk_content, similarity
+        FROM (
+            SELECT id, note_id, chunk_content, 1 - (embedding_value <=> $1) AS similarity
+            FROM note_embedding
+            WHERE is_deleted = false
+            ORDER BY embedding_value <=> $1
+            LIMIT 50
+        ) AS sub
+        WHERE similarity > 0.6
+        ORDER BY note_id, similarity DESC
+        LIMIT 5`
+
+	rows, err := n.db.Query(ctx, query, pgvector.NewVector(embeddingValues))
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	res := make([]*entity.NoteEmbedding, 0)
 	for rows.Next() {
 		var noteEmbedding entity.NoteEmbedding
+		var similarity float32
+
 		err := rows.Scan(
 			&noteEmbedding.Id,
+			&noteEmbedding.NoteId,
 			&noteEmbedding.ChunkContent,
+			&similarity,
 		)
 		if err != nil {
 			return nil, err
